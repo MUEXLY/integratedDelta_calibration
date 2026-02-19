@@ -28,40 +28,19 @@ def log_likelihood(y, x, theta, delta, eta, sigma2):
 def log_prior_delta(delta_k, K_delta_inv):
     return -0.5 * delta_k.T @ K_delta_inv @ delta_k
 
-def mh_update_delta_k(
-    k, delta, theta, ell_k, var_k,
-    x_md, y_md, eta, sigma2,
-    mh_scale
-):
-    No = x_md.shape[0]
+def gp_log_density(delta_k, K):
+    """
+    Stable log N(0,K) evaluation.
+    """
+    No = len(delta_k)
+    L = np.linalg.cholesky(K)
 
-    K = rbf_kernel(x_md, x_md, ell=ell_k, var=var_k)
-    L = cholesky(K + 1e-8*np.eye(No), lower=True)
+    alpha = np.linalg.solve(L.T, np.linalg.solve(L, delta_k))
 
-    proposal = delta[k] + mh_scale * (L @ np.random.randn(No))
+    logdet = 2*np.sum(np.log(np.diag(L)))
 
-    delta_prop = delta.copy()
-    delta_prop[k] = proposal
+    return -0.5 * (delta_k @ alpha + logdet + No*np.log(2*np.pi))
 
-    logpost_curr = (
-        log_likelihood(y_md, x_md, theta, delta, eta, sigma2)
-        + log_prior_delta(delta[k], np.linalg.inv(K))
-    )
-
-    logpost_prop = (
-        log_likelihood(y_md, x_md, theta, delta_prop, eta, sigma2)
-        + log_prior_delta(proposal, np.linalg.inv(K))
-    )
-
-    log_alpha = logpost_prop - logpost_curr
-
-    if np.log(np.random.rand()) < log_alpha:
-        delta[k] = proposal
-        accepted = True
-    else:
-        accepted = False
-
-    return delta, accepted
 
 def log_prior_hyperparams(ell, var, prior_ell, prior_var):
     """
@@ -131,15 +110,17 @@ def gibbs_sigma2(y_obs, x_obs, theta, delta, gp_eta, a, b):
 
     return invgamma.rvs(a_post, scale=b_post)
 
-def eta_predict(x, theta_star, gp):
-    """
-    Predict emulator mean and variance at z=(x,theta_star)
-    """
-    z = np.hstack([x.reshape(1,-1), theta_star.reshape(1,-1)])
-    
-    mean, std = gp.predict(z, return_std=True)
+def eta_predict(x, theta_star, gp_eta):
 
-    return mean.item(), (std.item()**2)
+    x = np.atleast_1d(np.asarray(x))
+    theta_star = np.atleast_1d(np.asarray(theta_star))
+
+    z = np.hstack([x, theta_star]).reshape(1, -1)
+
+    m, s2 = gp_eta.predict(z, return_std=True)
+
+    return m[0], s2[0]**2
+
 
 def log_likelihood_embedded(y_obs, x_obs, theta, delta, gp_eta, sigma2):
     """

@@ -66,9 +66,13 @@ def generate_rawData_figure(model_data, obs_data, figures_directory):
     # # plt.savefig(plt_path, dpi=150)
     # # print(f'Saved raw data figure to {plt_path}')
     # plt.close()
-    plt.show()
+    # plt.show()
+    plt_path = os.path.join(figures_directory, f'rawData_theta_parameters.png')
+    plt.savefig(plt_path, dpi=150)
+    print(f'Saved raw data figure to {plt_path}')
+    plt.close()
 
-def plot_delta_acceptance_trajectory(accept_trace, window=50):
+def plot_delta_acceptance_trajectory(accept_trace, window=50, figures_directory=None):
     """
     Plot acceptance-rate trajectories for each discrepancy GP delta_k.
 
@@ -112,9 +116,13 @@ def plot_delta_acceptance_trajectory(accept_trace, window=50):
     plt.title("Delta GP Acceptance Rate Trajectories")
     plt.legend()
     plt.grid(True)
-    plt.show()
+    # plt.show()
+    plt_path = os.path.join(figures_directory, f"delta_acceptance_trajectory.png")
+    plt.savefig(plt_path, dpi=150)
+    print(f"Saved delta acceptance trajectory figure to {plt_path}")
+    plt.close()
 
-def plot_delta_jump_sizes(delta_chain):
+def plot_delta_jump_sizes(delta_chain, figures_directory=None):
     """
     Plot jump magnitudes ||delta^(t) - delta^(t-1)|| for each delta_k.
 
@@ -148,4 +156,8 @@ def plot_delta_jump_sizes(delta_chain):
     plt.title("Delta GP Jump Magnitudes (Mixing Diagnostic)")
     plt.legend()
     plt.grid(True)
-    plt.show()
+    # plt.show()
+    plt_path = os.path.join(figures_directory, f"delta_jump_sizes.png")
+    plt.savefig(plt_path, dpi=150)
+    print(f"Saved delta jump size figure to {plt_path}")
+    plt.close()

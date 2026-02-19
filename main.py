@@ -118,7 +118,7 @@ def main():
         
 
     # Create figures directory if it doesn't exist
-    figures_directory = output_settings['figures_directory']
+    figures_directory = output_settings['figures_path']
     if not os.path.exists(figures_directory):
         os.makedirs(figures_directory)
 
@@ -233,7 +233,7 @@ def main():
     accept_trace = [[] for _ in range(dtheta)]
 
     # --- MH scaling adaptation settings ---
-    burnin = 500
+    burnin = calibration_settings["burn_in"]
     adapt_interval = 50
     target_accept = 0.35
 
@@ -341,30 +341,31 @@ def main():
     Nsamp = calibration_settings['posterior_predictive_samples']
     idx = np.random.choice(Nmcmc, Nsamp, replace=False)
 
-    for i in range(No):
+    y_preds = np.zeros((Nsamp, No))
 
-        preds = []
+    for s_i, s in enumerate(idx):
 
-        for s in idx:
+        for i in range(No):
 
             delta_s = delta_chain[s, :, i]
             theta_star = theta_fixed + delta_s
 
             m_i, s2_i = eta_predict(x_obs[i], theta_star, gp_eta)
 
-            preds.append(m_i)
+            # Draw one posterior predictive sample from emulator
+            y_preds[s_i, i] = np.random.normal(m_i, np.sqrt(s2_i))
+            
 
-        preds = np.array(preds)
-        
-
-        y_post_mean[i] = preds.mean()
-        y_post_var[i]  = preds.var()
-        # print prediction mean and 95% credible interval
-        print(f"x_obs[{i}] = {x_obs[i,0]:.3f}, y_obs = {y_obs[i]:.3f}, post pred mean = {y_post_mean[i]:.3f}, 95% CI = [{y_post_mean[i] - 2*np.sqrt(y_post_var[i]):.3f}, {y_post_mean[i] + 2*np.sqrt(y_post_var[i]):.3f}]")
+    # Posterior mean and variance
+    y_post_mean = y_preds.mean(axis=0)
+    y_post_std  = y_preds.std(axis=0)
+    # print prediction mean and 95% credible interval
+    print(f"x_obs[{i}] = {x_obs[i,0]:.3f}, y_obs = {y_obs[i]:.3f}, post pred mean = {y_post_mean[i]:.3f}, 95% CI = [{y_post_mean[i] - 2*np.sqrt(y_post_var[i]):.3f}, {y_post_mean[i] + 2*np.sqrt(y_post_var[i]):.3f}]")
 
     # ============================================================
     # 8. Convert back to physical units for plotting
     # ============================================================
+
 
     x_obs_col = [col for col in obs_data.columns if col.startswith('x_')][0]
     y_obs_col = [col for col in obs_data.columns if col.startswith('xi_')][0]
@@ -409,10 +410,69 @@ def main():
     delta_std_phys = delta_chain_phys.std(axis=0)
 
     # ============================================================
+    # 3. Delta GP diagnostics: mean + band across x
+    # ============================================================
+
+    # Sort x for smooth plotting
+    x_sorted_idx = np.argsort(x_obs.ravel())
+    x_sorted = x_obs.ravel()[x_sorted_idx]
+
+    # Delta posterior mean/std at each x
+    delta_mean = delta_chain.mean(axis=0)   # shape (dtheta, No)
+    delta_std  = delta_chain.std(axis=0)
+
+
+    # ============================================================
     # 9. Plot Posterior Predictive Fit and other figures
     # ============================================================
     if figure_options['posterior_predict_normalized']:
         print('Plotting posterior predictive check (normalized)...')
+        plt.figure(figsize=(8,6))
+
+        # Observations
+        plt.scatter(
+            x_obs, y_obs,
+            label="Observed MD data",
+            marker="o",
+            s=60
+        )
+
+        # Simulator evaluations
+        plt.scatter(
+            x_sim, y_sim,
+            label="Simulator DDD runs",
+            marker="x",
+            alpha=0.7
+        )
+
+        # Posterior mean prediction
+        plt.plot(
+            x_obs,
+            y_post_mean,
+            label="Posterior mean η(x,θ+δ)",
+            linewidth=2
+        )
+
+        # Uncertainty band
+        plt.fill_between(
+            x_obs.ravel(),
+            y_post_mean - 2*y_post_std,
+            y_post_mean + 2*y_post_std,
+            alpha=0.3,
+            label="±2 posterior std"
+        )
+
+        plt.title("Posterior Predictive Fit with Simulator Runs")
+        plt.xlabel("x (normalized domain)")
+        plt.ylabel("y (normalized CRSS)")
+        plt.legend()
+        plt.grid(True)
+        # plt.show()
+        plt_path = os.path.join(figures_directory, f"posterior_predictive_check_normalized.png")
+        plt.savefig(plt_path, dpi=150)
+        print(f"Saved posterior predictive check figure to {plt_path}")
+        plt.close()
+
     if figure_options['posterior_predict_physical']:
         print('Plotting posterior predictive check (physical)...')
 
@@ -447,17 +507,151 @@ def main():
             label="±2 posterior std"
         )
 
-
+        plt.title("Posterior Predictive Fit with Simulator Runs (Physical Units)")
+        plt.xlabel("x (physical domain)")
+        plt.ylabel("y (physical CRSS)")
+        plt.legend()
+        plt.grid(True)
+        # plt.show()
+        plt_path = os.path.join(figures_directory, f"posterior_predictive_check_physical.png")
+        plt.savefig(plt_path, dpi=150)
+        print(f"Saved posterior predictive check figure to {plt_path}")
+        plt.close()
 
     if figure_options['delta_posterior_normalized']:
         print('Plotting delta posterior samples (normalized)...')
+        # ============================================================
+        # 4. Subplots: One delta_k(x) per calibration parameter
+        # ============================================================
+
+        fig, axes = plt.subplots(
+            dtheta, 1,
+            figsize=(9, 3*dtheta),
+            sharex=True
+        )
+
+        if dtheta == 1:
+            axes = [axes]
+
+        param_names = ["coreSize", "mu", "nu"]  # customize if needed
+
+        for k in range(dtheta):
+
+            ax = axes[k]
+
+            mean_k = delta_mean[k, x_sorted_idx]
+            std_k  = delta_std[k, x_sorted_idx]
+
+            # Posterior mean
+            ax.plot(
+                x_sorted,
+                mean_k,
+                label=f"δ{k+1}(x) posterior mean",
+                linewidth=2
+            )
+
+            # Credible band
+            ax.fill_between(
+                x_sorted,
+                mean_k - 2*std_k,
+                mean_k + 2*std_k,
+                alpha=0.3,
+                label="±2 std"
+            )
+
+            # Overlay a few sample trajectories
+            for j in range(5):
+                s = np.random.choice(Nmcmc)
+                sample_k = delta_chain[s, k, x_sorted_idx]
+                ax.plot(x_sorted, sample_k, alpha=0.3)
+
+            ax.axhline(0, color="black", linestyle="--", linewidth=1)
+
+            name = param_names[k] if k < len(param_names) else f"theta{k}"
+            ax.set_title(f"Discrepancy Field δ(x) for parameter: {name}")
+            ax.set_ylabel("δ(x)")
+            ax.legend()
+            ax.grid(True)
+
+        axes[-1].set_xlabel("x (normalized domain)")
+
+        plt.tight_layout()
+        plt_path = os.path.join(figures_directory, f"delta_posterior_normalized.png")
+        plt.savefig(plt_path, dpi=150)
+        print(f"Saved delta posterior normalized figure to {plt_path}")
+        plt.close()
+
+
     if figure_options['delta_posterior_physical']:
         print('Plotting delta posterior samples (physical)...')
+
+        # ============================================================
+        # Delta GP diagnostics in physical theta units
+        # ============================================================
+
+        fig, axes = plt.subplots(
+            dtheta, 1,
+            figsize=(9, 3*dtheta),
+            sharex=True
+        )
+
+        if dtheta == 1:
+            axes = [axes]
+
+        param_names = ["coreSize", "mu", "nu"]
+
+        for k in range(dtheta):
+            ax = axes[k]
+
+            mean_k = delta_mean_phys[k, x_sorted_idx]
+            std_k = delta_std_phys[k, x_sorted_idx]
+
+            ax.plot(
+                x_sorted_phys,
+                mean_k,
+                label=f"δ{k+1}(x) posterior mean (physical)",
+                linewidth=2
+            )
+
+            ax.fill_between(
+                x_sorted_phys,
+                mean_k - 2 * std_k,
+                mean_k + 2 * std_k,
+                alpha=0.3,
+                label="±2 std"
+            )
+
+            for j in range(5):
+                s = np.random.choice(Nmcmc)
+                sample_k = delta_chain_phys[s, k, x_sorted_idx]
+                ax.plot(x_sorted_phys, sample_k, alpha=0.3)
+
+            ax.axhline(0, color="black", linestyle="--", linewidth=1)
+
+            name = param_names[k] if k < len(param_names) else f"theta{k}"
+            ax.set_title(f"Discrepancy Field δ(x) for parameter: {name} (Physical)")
+            ax.set_ylabel("δ(x) in physical units")
+            ax.legend()
+            ax.grid(True)
+
+        axes[-1].set_xlabel("x (physical domain)")
+        plt.tight_layout()
+        plt_path = os.path.join(figures_directory, f"delta_posterior_physical.png")
+        plt.savefig(plt_path, dpi=150)
+        print(f"Saved delta posterior physical figure to {plt_path}")
+        plt.close()
+
+
+
     if figure_options['acceptance_trajectory']:
         print('Plotting acceptance trajectory...')
+        plot_delta_acceptance_trajectory(accept_trace,window=50, figures_directory=figures_directory)
+
+
+
     if figure_options['step_size_plot']:
         print('Plotting step size trajectory...')
-
+        plot_delta_jump_sizes(delta_chain, figures_directory=figures_directory)
 
 
 
