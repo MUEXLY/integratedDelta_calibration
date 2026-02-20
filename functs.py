@@ -197,10 +197,15 @@ def mh_update_delta_k(
     else:
         return delta, False
 
-def export_emulator_json(gp, filename):
+def export_emulator_json(gp, filename,path="results/"):
     """
     Export sklearn GaussianProcessRegressor to JSON.
     """
+
+    if isinstance(gp, pd.DataFrame):
+        gp.to_json(f"{path}{filename}", orient="table", indent=4)
+        print(f"Emulator exported to {filename}")
+        return
 
     export_dict = {
         "kernel": str(gp.kernel_),
@@ -215,20 +220,23 @@ def export_emulator_json(gp, filename):
     export_dict["X_train"] = gp.X_train_.tolist()
     export_dict["y_train"] = gp.y_train_.tolist()
 
-    with open(filename, "w") as f:
+    with open(f"{path}{filename}", "w") as f:
         json.dump(export_dict, f, indent=4)
 
     print(f"Emulator exported to {filename}")
 
-def export_emulator_csv(gp, filename_prefix):
+def export_emulator_csv(gp, filename_prefix, path="results/"):
     """
     Export training data to CSV files.
     """
 
-    df_X = pd.DataFrame(gp.X_train_)
-    df_y = pd.DataFrame(gp.y_train_, columns=["y"])
+    if isinstance(gp, pd.DataFrame):
+        gp.to_csv(f"{path}{filename_prefix}", index=False)
+    else:
+        df_X = pd.DataFrame(gp.X_train_)
+        df_y = pd.DataFrame(gp.y_train_, columns=["y"])
 
-    df_X.to_csv(f"{filename_prefix}_X_train.csv", index=False)
-    df_y.to_csv(f"{filename_prefix}_y_train.csv", index=False)
+        df_X.to_csv(f"{path}{filename_prefix}_X_train.csv", index=False)
+        df_y.to_csv(f"{path}{filename_prefix}_y_train.csv", index=False)
 
     print("Training data exported to CSV.")
