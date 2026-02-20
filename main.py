@@ -20,6 +20,7 @@ def main():
     calibration_settings = config['calibration_settings']
     input_settings = config['input_settings']
     output_settings = config['output_settings']
+    results_options = output_settings['results_options']
 
     file_delimiter = input_settings['input_delimiter']
 
@@ -648,13 +649,19 @@ def main():
         plot_delta_acceptance_trajectory(accept_trace,window=50, figures_directory=figures_directory)
 
 
-
     if figure_options['step_size_plot']:
         print('Plotting step size trajectory...')
         plot_delta_jump_sizes(delta_chain, figures_directory=figures_directory)
 
+    if results_options['save_model_csv']:
+        print('Saving model data to CSV...')
+        # save in results path
+        os.chdir(output_settings['results_path'])
+        export_emulator_csv(model_data, "modelData/model_data.csv")
 
-
+    if results_options['save_model_json']:
+        print('Saving model data to JSON...')
+        export_emulator_json(model_data, "modelData/model_data.json")
     return
 
 
