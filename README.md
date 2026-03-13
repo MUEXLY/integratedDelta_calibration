@@ -137,3 +137,34 @@ Controls output of serialized model objects for downstream analysis.
 
 - The virtual environment directory (`venv/`) should not be committed to the repository.
 - Only `requirements.txt` is required to reproduce the environment.
+
+## Citation
+
+If you use this repository or the associated methodology in your research, please cite the following paper.
+
+**Bayesian Model Calibration with Integrated Discrepancy: Addressing Inexact Dislocation Dynamics Models**
+Liam Myhill, Enrique Martinez Saez, Sez Russcher (2026)
+
+[![arXiv](https://img.shields.io/badge/arXiv-2603.11960-b31b1b.svg)](https://arxiv.org/abs/2603.11960)
+[![DOI](https://img.shields.io/badge/DOI-coming%20soon-blue)]()
+
+Paper: https://arxiv.org/abs/2603.11960
+
+```bibtex
+@misc{myhill2026bayesianmodelcalibrationintegrated,
+  title   = {Bayesian Model Calibration with Integrated Discrepancy: Addressing Inexact Dislocation Dynamics Models},
+  author  = {Myhill, Liam and Martinez Saez, Enrique and Russcher, Sez},
+  year    = {2026},
+  eprint  = {2603.11960},
+  archivePrefix = {arXiv},
+  primaryClass  = {stat.ME},
+  url     = {https://arxiv.org/abs/2603.11960}
+}
+```
+
+---
+
+### Repository Citation
+
+This repository includes a `CITATION.cff` file so that GitHub can generate a **"Cite this repository"** button automatically.
+
