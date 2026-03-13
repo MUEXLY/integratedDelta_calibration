@@ -1,4 +1,3 @@
-```yaml
 cff-version: 1.2.0
 title: "Bayesian Model Calibration with Integrated Discrepancy"
 message: "If you use this repository, please cite the associated paper."
@@ -27,5 +26,5 @@ preferred-citation:
   archive: arXiv
   identifier: "arXiv:2603.11960"
   url: https://arxiv.org/abs/2603.11960
-```
+
 
