@@ -135,8 +135,6 @@ def main():
         # Joint emulator input z = (x, theta)
     Z_sim = np.hstack([x_sim, theta_sim])
 
-    # Simulator outputs
-    y_sim = model_normalized["y_crss_DDD"].values
 
 
     d = Z_sim.shape[1]  # dimension = 1 + dtheta
