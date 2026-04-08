@@ -13,4 +13,4 @@ CONFIG=config.json
 
 echo "Running config: $CONFIG"
 
-python main.py
+python3 main.py

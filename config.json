@@ -4,7 +4,8 @@
         "burn_in": 1000,
         "mh_scale_delta_prior": 0.5,
         "theta_initialization":"fixed",
-        "posterior_predictive_samples": 200
+        "posterior_predictive_samples": 200,
+        "allow_singular_covariance": true
     },
     "input_settings":{
         "input_delimiter": "\t",

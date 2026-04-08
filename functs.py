@@ -72,7 +72,7 @@ def log_prior_hyperparams(ell, var, prior_ell, prior_var):
 def mh_update_delta_hyperparams(
     delta_k, ell, var, x_md,
     prior_ell, prior_var,
-    mh_scales
+    mh_scales, allow_singular_covariance=False
 ):
     log_ell_prop = np.log(ell) + mh_scales["log_ell_delta"] * np.random.randn()
     log_var_prop = np.log(var) + mh_scales["log_var_delta"] * np.random.randn()
@@ -84,12 +84,12 @@ def mh_update_delta_hyperparams(
     K_prop = rbf_kernel(x_md, x_md, ell=ell_prop, var=var_prop) + 1e-8*np.eye(len(x_md))
 
     logp_curr = (
-        multivariate_normal.logpdf(delta_k, mean=np.zeros(len(delta_k)), cov=K_curr)
+        multivariate_normal.logpdf(delta_k, mean=np.zeros(len(delta_k)), cov=K_curr, allow_singular=allow_singular_covariance)
         + log_prior_hyperparams(ell, var, prior_ell, prior_var)
     )
 
     logp_prop = (
-        multivariate_normal.logpdf(delta_k, mean=np.zeros(len(delta_k)), cov=K_prop)
+        multivariate_normal.logpdf(delta_k, mean=np.zeros(len(delta_k)), cov=K_prop, allow_singular=allow_singular_covariance)
         + log_prior_hyperparams(ell_prop, var_prop, prior_ell, prior_var)
     )
 

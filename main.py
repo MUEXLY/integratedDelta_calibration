@@ -148,6 +148,8 @@ def main():
         length_scale_bounds=(1e-2, 1e2)
     )
 
+    allow_singular_covariance = calibration_settings.get("allow_singular_covariance", False)
+
     gp_eta = GaussianProcessRegressor(
         kernel=kernel_eta,
         alpha=1e-6,           # nugget for stability
@@ -238,8 +240,8 @@ def main():
     burnin = calibration_settings["burn_in"]
     adapt_interval = 50
     target_accept = 0.35
-
-    mh_scale_delta = 0.5  # initial guess
+    mh_scale_delta = calibration_settings["mh_scale_delta_prior"]
+    # mh_scale_delta = 0.5  # initial guess
 
     # store scale history (optional)
     mh_scale_trace = []
@@ -299,6 +301,7 @@ def main():
                 prior_ell,
                 prior_var,
                 mh_scales
+                allow_singular_covariance=allow_singular_covariance
             )
 
         # ---- Gibbs update σ² ----
