@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+title: "Bayesian Model Calibration with Integrated Discrepancy"
+message: "If you use this repository, please cite the associated paper."
+authors:
+  - family-names: Myhill
+    given-names: Liam
+  - family-names: Martinez Saez
+    given-names: Enrique
+  - family-names: Russcher
+    given-names: Sez
+year: 2026
+repository-code: https://github.com/<your-username>/<repo-name>
+url: https://arxiv.org/abs/2603.11960
+
+preferred-citation:
+  type: article
+  title: "Bayesian Model Calibration with Integrated Discrepancy: Addressing Inexact Dislocation Dynamics Models"
+  authors:
+    - family-names: Myhill
+      given-names: Liam
+    - family-names: Martinez Saez
+      given-names: Enrique
+    - family-names: Russcher
+      given-names: Sez
+  year: 2026
+  archive: arXiv
+  identifier: "arXiv:2603.11960"
+  url: https://arxiv.org/abs/2603.11960
+
+

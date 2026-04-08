@@ -23,11 +23,11 @@
             "acceptance_trajectory": true,
             "step_size_plot": true
         },
-        "results_path": "results/",
         "results_options":{
+            "results_path": "results/",
             "save_calibrated_parameters": true,
-            "save_calibrated_parameters_csv": true,
-            "save_calibrated_parameters_json": true
+            "save_model_csv": true,
+            "save_model_json": true
         }
     }
     

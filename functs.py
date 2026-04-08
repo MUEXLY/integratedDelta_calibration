@@ -2,6 +2,8 @@ import numpy as np
 from scipy.linalg import cholesky, cho_solve
 from scipy.stats import multivariate_normal, norm
 from scipy.stats import invgamma
+import json
+import pandas as pd
 
 def rbf_kernel(X, Y, ell=1.0, var=1.0):
     X = np.atleast_2d(X)
@@ -194,3 +196,47 @@ def mh_update_delta_k(
         return delta, True
     else:
         return delta, False
+
+def export_emulator_json(gp, filename,path="results/"):
+    """
+    Export sklearn GaussianProcessRegressor to JSON.
+    """
+
+    if isinstance(gp, pd.DataFrame):
+        gp.to_json(f"{path}{filename}", orient="table", indent=4)
+        print(f"Emulator exported to {filename}")
+        return
+
+    export_dict = {
+        "kernel": str(gp.kernel_),
+        "kernel_params": gp.kernel_.get_params(),
+        "alpha": float(gp.alpha),
+        "normalize_y": bool(gp.normalize_y),
+        "X_train_shape": gp.X_train_.shape,
+        "y_train_shape": gp.y_train_.shape,
+    }
+
+    # Convert numpy arrays to lists for JSON
+    export_dict["X_train"] = gp.X_train_.tolist()
+    export_dict["y_train"] = gp.y_train_.tolist()
+
+    with open(f"{path}{filename}", "w") as f:
+        json.dump(export_dict, f, indent=4)
+
+    print(f"Emulator exported to {filename}")
+
+def export_emulator_csv(gp, filename_prefix, path="results/"):
+    """
+    Export training data to CSV files.
+    """
+
+    if isinstance(gp, pd.DataFrame):
+        gp.to_csv(f"{path}{filename_prefix}", index=False)
+    else:
+        df_X = pd.DataFrame(gp.X_train_)
+        df_y = pd.DataFrame(gp.y_train_, columns=["y"])
+
+        df_X.to_csv(f"{path}{filename_prefix}_X_train.csv", index=False)
+        df_y.to_csv(f"{path}{filename_prefix}_y_train.csv", index=False)
+
+    print("Training data exported to CSV.")
