@@ -1,14 +1,35 @@
 {
     "calibration_settings":{
-        "N_mcmc": 1000,
-        "burn_in": 200,
+        "N_mcmc": 10000,
+        "burn_in": 1000,
         "mh_scale_delta_prior": 0.5,
         "theta_initialization":"fixed",
         "posterior_predictive_samples": 200
     },
     "input_settings":{
         "input_delimiter": "\t",
-        "input_header": true
+        "input_header": true,
+        "input_observations_path": "./observationData/",
+        "input_model_path": "./modelData/"
+    },
+    "label_settings":{
+        "custom_labels": true,
+        "theta_labels":{
+                "theta1": "\theta_1",
+                "theta2": "\theta_2"
+
+        },
+        "kappa_labels":{
+                "kappa1": "kappa_1",
+                "kappa2": "kappa_2"
+        },
+        "observation_labels":{
+                "obs1": "y"
+        },
+        "application_domain_labels":{
+                "domain1": "x"
+        }
+
     },
     "output_settings":{
         "figures_path": "figures/",

@@ -20,8 +20,11 @@ def main():
     calibration_settings = config['calibration_settings']
     input_settings = config['input_settings']
     output_settings = config['output_settings']
+    label_settings = config['label_settings']
     results_options = output_settings['results_options']
 
+    observation_path = input_settings['input_observations_path']
+    model_path = input_settings['input_model_path']
     file_delimiter = input_settings['input_delimiter']
 
     model_data = pd.DataFrame()
@@ -29,7 +32,7 @@ def main():
     #populate x values from appDomain.txt
     # The first line of appDomain.txt contains the header names
     # The subsequent lines contain the x values
-    with open('modelData/appDomain.txt', 'r') as f:
+    with open(f'{model_path}appDomain.txt', 'r') as f:
         lines = [line.strip() for line in f if line.strip()]
         headers = lines[0].strip().split(file_delimiter)
         for i, header in enumerate(headers):
@@ -39,7 +42,7 @@ def main():
     # #populate theta values from thetaVals.txt
     # The first line of thetaVals.txt contains the header names
     # The subsequent lines contain the theta values
-    with open('modelData/thetaVals.txt', 'r') as f:
+    with open(f'{model_path}thetaVals.txt', 'r') as f:
         lines = [line.strip() for line in f if line.strip()]
         headers = lines[0].strip().split(file_delimiter)
         for i, header in enumerate(headers):
@@ -50,7 +53,7 @@ def main():
     # The first line of modelPredictions.txt contains the header names
     # The subsequent lines contain the y values
     # If there are blank lines at the end of the file, ignore
-    with open('modelData/modelPredictions.txt', 'r') as f:
+    with open(f'{model_path}modelPredictions.txt', 'r') as f:
         lines = [line.strip() for line in f if line.strip()]
         headers = lines[0].strip().split(file_delimiter)
         for i, header in enumerate(headers):
@@ -65,14 +68,14 @@ def main():
     # y will be read from obsData/observationData.txt
     # Each row will correspond to a different observation
     obs_data = pd.DataFrame()
-    with open('observationData/appDomain.txt', 'r') as f:
+    with open(f'{observation_path}appDomain.txt', 'r') as f:
         lines = [line.strip() for line in f if line.strip()]
         headers = lines[0].strip().split(file_delimiter)
         for i, header in enumerate(headers):
             col_name = f'x_{header}'
             obs_data[col_name] = [float(line.strip().split(file_delimiter)[i]) for line in lines[1:]]
 
-    with open('observationData/observationData.txt', 'r') as f:
+    with open(f'{observation_path}observationData.txt', 'r') as f:
         lines = [line.strip() for line in f if line.strip()]
         headers = lines[0].strip().split(file_delimiter)
         for i, header in enumerate(headers):
@@ -133,7 +136,7 @@ def main():
     theta_sim = model_normalized[[col for col in model_normalized.columns if col.startswith('theta_')]]
     y_sim = model_normalized[[col for col in model_normalized.columns if col.startswith('y_')]]
 
-        # Joint emulator input z = (x, theta)
+    # Joint emulator input z = (x, theta)
     Z_sim = np.hstack([x_sim, theta_sim])
 
 
@@ -431,7 +434,7 @@ def main():
         # Observations
         plt.scatter(
             x_obs, y_obs,
-            label="Observed MD data",
+            label="Observed data",
             marker="o",
             s=60
         )
@@ -439,7 +442,7 @@ def main():
         # Simulator evaluations
         plt.scatter(
             x_sim, y_sim,
-            label="Simulator DDD runs",
+            label="Simulator runs",
             marker="x",
             alpha=0.7
         )
@@ -463,7 +466,7 @@ def main():
 
         plt.title("Posterior Predictive Fit with Simulator Runs")
         plt.xlabel("x (normalized domain)")
-        plt.ylabel("y (normalized CRSS)")
+        plt.ylabel("y (normalized)")
         plt.legend()
         plt.grid(True)
         # plt.show()
@@ -508,7 +511,7 @@ def main():
 
         plt.title("Posterior Predictive Fit with Simulator Runs (Physical Units)")
         plt.xlabel("x (physical domain)")
-        plt.ylabel("y (physical CRSS)")
+        plt.ylabel("y (physical)")
         plt.legend()
         plt.grid(True)
         # plt.show()
@@ -532,7 +535,7 @@ def main():
         if dtheta == 1:
             axes = [axes]
 
-        param_names = ["coreSize", "mu", "nu"]  # customize if needed
+        param_names = theta_labels # customize if needed
 
         for k in range(dtheta):
 
@@ -597,7 +600,7 @@ def main():
         if dtheta == 1:
             axes = [axes]
 
-        param_names = ["coreSize", "mu", "nu"]
+        param_names = list(theta_labels.values())
 
         for k in range(dtheta):
             ax = axes[k]
