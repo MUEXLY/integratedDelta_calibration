@@ -300,7 +300,7 @@ def main():
                 x_obs,
                 prior_ell,
                 prior_var,
-                mh_scales
+                mh_scales,
                 allow_singular_covariance=allow_singular_covariance
             )
 
