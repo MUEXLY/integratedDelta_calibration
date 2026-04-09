@@ -603,7 +603,7 @@ def main():
         if dtheta == 1:
             axes = [axes]
 
-        param_names = list(theta_labels.values())
+        param_names = theta_labels
 
         for k in range(dtheta):
             ax = axes[k]
