@@ -406,6 +406,11 @@ def main():
     theta_max = model_data[theta_cols].max().values
     theta_range = theta_max - theta_min
 
+    theta_fixed_phys = (
+    theta_fixed * theta_range
+    + theta_min
+)
+
     delta_chain_phys = delta_chain * theta_range[:, None]
 
     # Sort x for smooth plotting (physical)
@@ -414,6 +419,118 @@ def main():
 
     delta_mean_phys = delta_chain_phys.mean(axis=0)
     delta_std_phys = delta_chain_phys.std(axis=0)
+
+    # Posterior theta prediction in physical units
+    theta_post_mean_phys = (
+        theta_fixed_phys[:, None]
+        + delta_mean_phys
+    )
+
+    theta_post_std_phys = delta_std_phys
+
+    # ============================================================
+    # Cross-validation MSE metrics
+    # ============================================================
+
+    theta_mse = []
+    y_mse = None
+
+    if cross_validation_settings['conduct_cross_validation']:
+
+        known_theta_form = cross_validation_settings.get(
+            "known_theta_form"
+        )
+
+        known_theta_form_params = cross_validation_settings.get(
+            "known_theta_form_params",
+            {}
+        )
+
+        form_config = known_theta_form_params.get(
+            known_theta_form,
+            {}
+        )
+
+        for k in range(dtheta):
+
+            theta_true = build_known_theta_field(
+                known_theta_form,
+                form_config,
+                x_sorted_phys,
+                k
+            )
+
+            theta_pred = theta_post_mean_phys[
+                k,
+                x_sorted_idx
+            ]
+
+            mse_k = np.mean(
+                (theta_true - theta_pred)**2
+            )
+
+            theta_mse.append(mse_k)
+
+            print(f"[CV] Theta MSE ({theta_labels[k]}): {mse_k:.6f}")
+
+        # Posterior predictive MSE
+        y_mse = np.mean(
+            (y_obs_phys.ravel() - y_post_mean_phys.ravel())**2
+        )
+
+        print(f"[CV] Posterior predictive MSE: {y_mse:.6f}")
+
+    # ============================================================
+    # Save cross-validation metrics to JSON
+    # ============================================================
+
+    if cross_validation_settings['conduct_cross_validation']:
+
+        cv_results = {
+            "known_theta_form": known_theta_form,
+            "theta_mse": {},
+            "posterior_predictive_mse": float(y_mse)
+        }
+
+        # Store theta-wise MSE values
+        for k, mse_k in enumerate(theta_mse):
+
+            param_name = (
+                theta_labels[k]
+                if k < len(theta_labels)
+                else f"theta_{k}"
+            )
+
+            cv_results["theta_mse"][param_name] = float(mse_k)
+
+        # Optional: include normalized RMSE
+        if "theta_nrmse" in locals():
+
+            cv_results["theta_nrmse"] = {}
+
+            for k, nrmse_k in enumerate(theta_nrmse):
+
+                param_name = (
+                    theta_labels[k]
+                    if k < len(theta_labels)
+                    else f"theta_{k}"
+                )
+
+                cv_results["theta_nrmse"][param_name] = float(nrmse_k)
+
+        # Create results directory if needed
+        if not os.path.exists(results_directory):
+            os.makedirs(results_directory)
+
+        cv_json_path = os.path.join(
+            results_directory,
+            "cross_validation_metrics.json"
+        )
+
+        with open(cv_json_path, "w") as f:
+            json.dump(cv_results, f, indent=4)
+
+        print(f"Saved cross-validation metrics to {cv_json_path}")
 
     # ============================================================
     # 3. Delta GP diagnostics: mean + band across x
@@ -595,33 +712,6 @@ def main():
         # Delta GP diagnostics in physical theta units
         # ============================================================
 
-        # Determine if cross-validation is enabled for kappa fields
-        if cross_validation_settings['conduct_cross_validation']:
-            print("Cross-validation enabled: plotting kappa fields in physical units.")
-            known_theta_form = cross_validation_settings.get("known_theta_form")
-            known_theta_form_params = cross_validation_settings.get("known_theta_form_params", {})
-            form_config = known_theta_form_params.get(known_theta_form, {})
-
-            if known_theta_form == "constant" and "values" in form_config:
-                known_theta_values = form_config.get("values")
-                if k < len(known_theta_values):
-                    theta_known = known_theta_values[k] - theta_fixed_phys[k]
-                    ax_k.axhline(theta_known, linestyle="--", color="red", label=rf"$\kappa_{{{k}}}^{{\mathrm{{true}}}}$")
-            elif known_theta_form == "trig_funct" and "functions" in form_config:
-                trig_functions = form_config.get("functions")
-                if k < len(trig_functions):
-                    func_name = trig_functions[k]
-                    if func_name == "sin":
-                        theta_known = np.sin(x) - theta_fixed_phys[k]
-                    elif func_name == "cos":
-                        theta_known = np.cos(x) - theta_fixed_phys[k]
-                    else:
-                        theta_known = np.zeros_like(x)
-                ax_k.plot(x, theta_known, linestyle="--", color="red", label=rf"$\kappa_{{{k}}}^{{\mathrm{{true}}}}(x)$")
-        else:
-            print("Cross-validation disabled: plotting kappa fields in physical units (note: may be less interpretable without CV).")
-
-
         fig, axes = plt.subplots(
             dtheta, 1,
             figsize=(9, 3*dtheta),
@@ -654,12 +744,59 @@ def main():
                 label="±2 std"
             )
 
-            for j in range(5):
-                s = np.random.choice(Nmcmc)
-                sample_k = delta_chain_phys[s, k, x_sorted_idx]
-                ax.plot(x_sorted_phys, sample_k, alpha=0.3)
+            # ============================================================
+            # Overlay known theta field for cross-validation
+            # ============================================================
 
-            ax.axhline(0, color="black", linestyle="--", linewidth=1)
+            if cross_validation_settings['conduct_cross_validation']:
+
+                known_theta_form = cross_validation_settings.get(
+                    "known_theta_form"
+                )
+
+                known_theta_form_params = cross_validation_settings.get(
+                    "known_theta_form_params",
+                    {}
+                )
+
+                form_config = known_theta_form_params.get(
+                    known_theta_form,
+                    {}
+                )
+
+                theta_true = build_known_theta_field(
+                    known_theta_form,
+                    form_config,
+                    x_sorted_phys,
+                    k
+                )
+
+                theta_pred = theta_post_mean_phys[
+                    k,
+                    x_sorted_idx
+                ]
+
+                ax.plot(
+                    x_sorted_phys,
+                    theta_true,
+                    linestyle="--",
+                    linewidth=2,
+                    label=rf"$\theta_{{{k+1}}}^{{true}}(x)$"
+                )
+
+                ax.plot(
+                    x_sorted_phys,
+                    theta_pred,
+                    linewidth=2,
+                    label=rf"$\theta_{{{k+1}}}^{{pred}}(x)$"
+                )
+
+            # for j in range(5):
+            #     s = np.random.choice(Nmcmc)
+            #     sample_k = delta_chain_phys[s, k, x_sorted_idx]
+            #     ax.plot(x_sorted_phys, sample_k, alpha=0.3)
+
+            ax.axhline(0, color="black", linestyle="--", linewidth=1, label=r"$\theta_0$")
 
             name = param_names[k] if k < len(param_names) else f"theta{k}"
             ax.set_title(f"Discrepancy Field \kappa(x) for parameter: {name}")

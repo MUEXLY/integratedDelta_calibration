@@ -240,3 +240,38 @@ def export_emulator_csv(gp, filename_prefix, path="results/"):
         df_y.to_csv(f"{path}{filename_prefix}_y_train.csv", index=False)
 
     print("Training data exported to CSV.")
+
+def build_known_theta_field(
+    known_theta_form,
+    form_config,
+    x_phys,
+    theta_idx
+):
+    """
+    Returns known theta(x) field in physical units.
+    """
+
+    x = np.asarray(x_phys).ravel()
+
+    if known_theta_form == "constant":
+
+        values = form_config.get("values", [])
+
+        if theta_idx < len(values):
+            return np.ones_like(x) * values[theta_idx]
+
+    elif known_theta_form == "trig_funct":
+
+        funcs = form_config.get("functions", [])
+
+        if theta_idx < len(funcs):
+
+            f = funcs[theta_idx]
+
+            if f == "sin":
+                return np.sin(x)
+
+            elif f == "cos":
+                return np.cos(x)
+
+    return np.zeros_like(x)
