@@ -20,6 +20,7 @@ def main():
     calibration_settings = config['calibration_settings']
     input_settings = config['input_settings']
     output_settings = config['output_settings']
+    cross_validation_settings = config['cross_validation_settings']
     label_settings = config['label_settings']
     results_options = output_settings['results_options']
 
@@ -594,6 +595,33 @@ def main():
         # Delta GP diagnostics in physical theta units
         # ============================================================
 
+        # Determine if cross-validation is enabled for kappa fields
+        if cross_validation_settings['conduct_cross_validation']:
+            print("Cross-validation enabled: plotting kappa fields in physical units.")
+            known_theta_form = cross_validation_settings.get("known_theta_form")
+            known_theta_form_params = cross_validation_settings.get("known_theta_form_params", {})
+            form_config = known_theta_form_params.get(known_theta_form, {})
+
+            if known_theta_form == "constant" and "values" in form_config:
+                known_theta_values = form_config.get("values")
+                if k < len(known_theta_values):
+                    theta_known = known_theta_values[k] - theta_fixed_phys[k]
+                    ax_k.axhline(theta_known, linestyle="--", color="red", label=rf"$\kappa_{{{k}}}^{{\mathrm{{true}}}}$")
+            elif known_theta_form == "trig_funct" and "functions" in form_config:
+                trig_functions = form_config.get("functions")
+                if k < len(trig_functions):
+                    func_name = trig_functions[k]
+                    if func_name == "sin":
+                        theta_known = np.sin(x) - theta_fixed_phys[k]
+                    elif func_name == "cos":
+                        theta_known = np.cos(x) - theta_fixed_phys[k]
+                    else:
+                        theta_known = np.zeros_like(x)
+                ax_k.plot(x, theta_known, linestyle="--", color="red", label=rf"$\kappa_{{{k}}}^{{\mathrm{{true}}}}(x)$")
+        else:
+            print("Cross-validation disabled: plotting kappa fields in physical units (note: may be less interpretable without CV).")
+
+
         fig, axes = plt.subplots(
             dtheta, 1,
             figsize=(9, 3*dtheta),
@@ -614,7 +642,7 @@ def main():
             ax.plot(
                 x_sorted_phys,
                 mean_k,
-                label=f"δ{k+1}(x) posterior mean (physical)",
+                label=f"\kappa_{k+1}(x) posterior mean",
                 linewidth=2
             )
 
@@ -634,12 +662,12 @@ def main():
             ax.axhline(0, color="black", linestyle="--", linewidth=1)
 
             name = param_names[k] if k < len(param_names) else f"theta{k}"
-            ax.set_title(f"Discrepancy Field δ(x) for parameter: {name} (Physical)")
+            ax.set_title(f"Discrepancy Field \kappa(x) for parameter: {name}")
             ax.set_ylabel("δ(x) in physical units")
             ax.legend()
             ax.grid(True)
 
-        axes[-1].set_xlabel("x (physical domain)")
+        axes[-1].set_xlabel("x")
         plt.tight_layout()
         plt_path = os.path.join(figures_directory, f"delta_posterior_physical.png")
         plt.savefig(plt_path, dpi=150)
