@@ -406,10 +406,10 @@ def main():
     theta_max = model_data[theta_cols].max().values
     theta_range = theta_max - theta_min
 
-    theta_fixed_phys = (
-    theta_fixed * theta_range
-    + theta_min
-)
+    theta_fixed_phys = np.asarray(
+    theta_fixed * theta_range + theta_min
+    )
+
 
     delta_chain_phys = delta_chain * theta_range[:, None]
 
@@ -691,12 +691,12 @@ def main():
             ax.axhline(0, color="black", linestyle="--", linewidth=1)
 
             name = param_names[k] if k < len(param_names) else f"theta{k}"
-            ax.set_title(f"Discrepancy Field δ(x) for parameter: {name}")
-            ax.set_ylabel("δ(x)")
+            ax.set_title(f"Discrepancy Field \kappa(x) for parameter: {name}")
+            ax.set_ylabel("\kappa(x)")
             ax.legend()
             ax.grid(True)
 
-        axes[-1].set_xlabel("x (normalized domain)")
+        axes[-1].set_xlabel("x")
 
         plt.tight_layout()
         plt_path = os.path.join(figures_directory, f"delta_posterior_normalized.png")
@@ -732,7 +732,7 @@ def main():
             ax.plot(
                 x_sorted_phys,
                 mean_k,
-                label=f"\kappa_{k+1}(x) posterior mean",
+                label=rf"$\kappa_{k+1}(x)$ posterior mean",
                 linewidth=2
             )
 
