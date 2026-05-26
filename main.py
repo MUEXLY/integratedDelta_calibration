@@ -518,7 +518,8 @@ def main():
 
                 cv_results["theta_nrmse"][param_name] = float(nrmse_k)
 
-        # Create results directory if needed
+        # Create results directory if it doesn't exist
+        results_directory = results_options['results_path']
         if not os.path.exists(results_directory):
             os.makedirs(results_directory)
 
@@ -823,10 +824,7 @@ def main():
         plot_delta_jump_sizes(delta_chain, figures_directory=figures_directory)
 
 
-    # Create results directory if it doesn't exist
-    results_directory = results_options['results_path']
-    if not os.path.exists(results_directory):
-        os.makedirs(results_directory)
+    
 
     if results_options['save_model_csv']:
         print('Saving model data to CSV...')
