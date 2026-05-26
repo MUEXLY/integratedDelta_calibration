@@ -429,11 +429,14 @@ def main():
     theta_post_std_phys = delta_std_phys
 
     # ============================================================
-    # Cross-validation MSE metrics
+    # Cross-validation metrics
     # ============================================================
 
     theta_mse = []
+    theta_nrmse = []
+
     y_mse = None
+    y_nrmse = None
 
     if cross_validation_settings['conduct_cross_validation']:
 
@@ -441,15 +444,23 @@ def main():
             "known_theta_form"
         )
 
-        known_theta_form_params = cross_validation_settings.get(
-            "known_theta_form_params",
-            {}
+        known_theta_form_params = (
+            cross_validation_settings.get(
+                "known_theta_form_params",
+                {}
+            )
         )
 
-        form_config = known_theta_form_params.get(
-            known_theta_form,
-            {}
+        form_config = (
+            known_theta_form_params.get(
+                known_theta_form,
+                {}
+            )
         )
+
+        # ========================================================
+        # Theta metrics
+        # ========================================================
 
         for k in range(dtheta):
 
@@ -469,30 +480,80 @@ def main():
                 (theta_true - theta_pred)**2
             )
 
+            rmse_k = np.sqrt(mse_k)
+
+            theta_range_k = (
+                np.max(theta_true)
+                - np.min(theta_true)
+            )
+
+            if theta_range_k < 1e-12:
+                theta_range_k = 1.0
+
+            nrmse_k = (
+                rmse_k / theta_range_k
+            )
+
             theta_mse.append(mse_k)
+            theta_nrmse.append(nrmse_k)
 
-            print(f"[CV] Theta MSE ({theta_labels[k]}): {mse_k:.6f}")
+            print(
+                f"[CV] Theta "
+                f"({theta_labels[k]}): "
+                f"MSE={mse_k:.6f}, "
+                f"NRMSE={nrmse_k:.6f}"
+            )
 
-        # Posterior predictive MSE
+        # ========================================================
+        # Posterior predictive metrics
+        # ========================================================
+
+        y_true = y_obs_phys.ravel()
+
+        y_pred = y_post_mean_phys.ravel()
+
         y_mse = np.mean(
-            (y_obs_phys.ravel() - y_post_mean_phys.ravel())**2
+            (y_true - y_pred)**2
         )
 
-        print(f"[CV] Posterior predictive MSE: {y_mse:.6f}")
+        y_rmse = np.sqrt(y_mse)
+
+        y_range = (
+            np.max(y_true)
+            - np.min(y_true)
+        )
+
+        y_nrmse = (
+            y_rmse / (y_range + 1e-12)
+        )
+
+        print(
+            f"[CV] Posterior predictive: "
+            f"MSE={y_mse:.6f}, "
+            f"NRMSE={y_nrmse:.6f}"
+        )
 
     # ============================================================
-    # Save cross-validation metrics to JSON
+    # Save JSON
     # ============================================================
 
     if cross_validation_settings['conduct_cross_validation']:
 
         cv_results = {
+
             "known_theta_form": known_theta_form,
+
+            "posterior_predictive_mse": float(y_mse),
+
+            "posterior_predictive_nrmse": float(
+                y_nrmse
+            ),
+
             "theta_mse": {},
-            "posterior_predictive_mse": float(y_mse)
+
+            "theta_nrmse": {}
         }
 
-        # Store theta-wise MSE values
         for k, mse_k in enumerate(theta_mse):
 
             param_name = (
@@ -501,27 +562,13 @@ def main():
                 else f"theta_{k}"
             )
 
-            cv_results["theta_mse"][param_name] = float(mse_k)
+            cv_results["theta_mse"][
+                param_name
+            ] = float(mse_k)
 
-        # Optional: include normalized RMSE
-        if "theta_nrmse" in locals():
-
-            cv_results["theta_nrmse"] = {}
-
-            for k, nrmse_k in enumerate(theta_nrmse):
-
-                param_name = (
-                    theta_labels[k]
-                    if k < len(theta_labels)
-                    else f"theta_{k}"
-                )
-
-                cv_results["theta_nrmse"][param_name] = float(nrmse_k)
-
-        # Create results directory if it doesn't exist
-        results_directory = results_options['results_path']
-        if not os.path.exists(results_directory):
-            os.makedirs(results_directory)
+            cv_results["theta_nrmse"][
+                param_name
+            ] = float(theta_nrmse[k])
 
         cv_json_path = os.path.join(
             results_directory,
@@ -531,7 +578,10 @@ def main():
         with open(cv_json_path, "w") as f:
             json.dump(cv_results, f, indent=4)
 
-        print(f"Saved cross-validation metrics to {cv_json_path}")
+        print(
+            f"Saved cross-validation metrics to "
+            f"{cv_json_path}"
+        )
 
     # ============================================================
     # 3. Delta GP diagnostics: mean + band across x
