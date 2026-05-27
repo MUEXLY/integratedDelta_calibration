@@ -576,6 +576,8 @@ def main():
             "cross_validation_metrics.json"
         )
 
+        os.makedirs(results_directory, exist_ok=True)
+
         with open(cv_json_path, "w") as f:
             json.dump(cv_results, f, indent=4)
 
