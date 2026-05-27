@@ -23,6 +23,7 @@ def main():
     cross_validation_settings = config['cross_validation_settings']
     label_settings = config['label_settings']
     results_options = output_settings['results_options']
+    results_directory = results_options['results_path']
 
     observation_path = input_settings['input_observations_path']
     model_path = input_settings['input_model_path']
