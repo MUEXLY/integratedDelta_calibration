@@ -5,6 +5,62 @@ from scipy.stats import invgamma
 import json
 import pandas as pd
 
+
+def holdout_sensitivity_metric(
+    y_true,
+    y_pred,
+    holdout_fractions=(0.1, 0.2, 0.3),
+    n_repeats=20,
+    random_state=0,
+):
+    """Estimate predictive sensitivity to withholding observations.
+
+    Predictions are evaluated on randomly withheld observations for each
+    requested fraction.  ``sensitivity`` is the change in normalized RMSE
+    relative to the score on all observations; positive values indicate
+    degradation when observations are withheld.
+    """
+    y_true = np.asarray(y_true, dtype=float).ravel()
+    y_pred = np.asarray(y_pred, dtype=float).ravel()
+    if y_true.shape != y_pred.shape:
+        raise ValueError("y_true and y_pred must have the same shape")
+    if y_true.size < 2:
+        raise ValueError("At least two observations are required")
+    if n_repeats < 1:
+        raise ValueError("n_repeats must be positive")
+
+    fractions = tuple(float(fraction) for fraction in holdout_fractions)
+    if any(fraction <= 0 or fraction >= 1 for fraction in fractions):
+        raise ValueError("holdout fractions must be between zero and one")
+
+    scale = np.ptp(y_true)
+    scale = scale if scale > 0 else 1.0
+    full_nrmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)) / scale)
+    rng = np.random.default_rng(random_state)
+    results = {}
+
+    for fraction in fractions:
+        n_holdout = max(1, int(round(fraction * y_true.size)))
+        scores = []
+        for _ in range(n_repeats):
+            holdout = rng.choice(y_true.size, size=n_holdout, replace=False)
+            score = np.sqrt(np.mean((y_true[holdout] - y_pred[holdout]) ** 2))
+            scores.append(float(score / scale))
+        mean_score = float(np.mean(scores))
+        results[str(fraction)] = {
+            "holdout_count": n_holdout,
+            "nrmse": mean_score,
+            "nrmse_std": float(np.std(scores)),
+            "sensitivity": mean_score - full_nrmse,
+        }
+
+    return {
+        "full_nrmse": full_nrmse,
+        "holdout_results": results,
+        "n_repeats": int(n_repeats),
+        "scale": float(scale),
+    }
+
 def rbf_kernel(X, Y, ell=1.0, var=1.0):
     X = np.atleast_2d(X)
     Y = np.atleast_2d(Y)

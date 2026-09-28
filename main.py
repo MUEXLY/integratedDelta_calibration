@@ -24,6 +24,7 @@ def main():
     label_settings = config['label_settings']
     results_options = output_settings['results_options']
     results_directory = results_options['results_path']
+    validation_options = output_settings.get('validation_options', {})
 
     observation_path = input_settings['input_observations_path']
     model_path = input_settings['input_model_path']
@@ -428,6 +429,37 @@ def main():
     )
 
     theta_post_std_phys = delta_std_phys
+
+    if figure_options.get('prior_posterior_density', False):
+        posterior_start = min(max(burnin, 0), Nmcmc - 1)
+        posterior_theta_samples = (
+            theta_fixed_phys[None, :, None]
+            + delta_chain_phys[posterior_start:]
+        ).transpose(0, 2, 1).reshape(-1, dtheta)
+        plot_prior_posterior_densities(
+            model_data[theta_cols].to_numpy(),
+            posterior_theta_samples,
+            theta_labels,
+            figures_directory,
+        )
+
+    if figure_options.get('holdout_sensitivity', False):
+        holdout_metrics = holdout_sensitivity_metric(
+            y_obs_phys,
+            y_post_mean_phys,
+            holdout_fractions=validation_options.get(
+                'holdout_fractions', (0.1, 0.2, 0.3)
+            ),
+            n_repeats=validation_options.get('holdout_repeats', 20),
+            random_state=validation_options.get('random_seed', 0),
+        )
+        os.makedirs(results_directory, exist_ok=True)
+        holdout_json_path = os.path.join(
+            results_directory, 'holdout_sensitivity_metrics.json'
+        )
+        with open(holdout_json_path, 'w') as f:
+            json.dump(holdout_metrics, f, indent=4)
+        print(f"Saved holdout sensitivity metrics to {holdout_json_path}")
 
     # ============================================================
     # Cross-validation metrics

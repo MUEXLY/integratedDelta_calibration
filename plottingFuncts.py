@@ -2,6 +2,65 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
+from scipy.stats import gaussian_kde
+
+
+def _density(values, x_grid):
+    """Return a KDE where possible, falling back for constant samples."""
+    values = np.asarray(values, dtype=float)
+    if np.ptp(values) == 0 or len(values) < 2:
+        return np.zeros_like(x_grid)
+    try:
+        return gaussian_kde(values)(x_grid)
+    except np.linalg.LinAlgError:
+        return np.zeros_like(x_grid)
+
+
+def plot_prior_posterior_densities(
+    prior_samples,
+    posterior_samples,
+    parameter_labels,
+    figures_directory,
+    filename="prior_posterior_densities.png",
+):
+    """Plot empirical prior and posterior densities for each calibration parameter."""
+    prior_samples = np.asarray(prior_samples, dtype=float)
+    posterior_samples = np.asarray(posterior_samples, dtype=float)
+    if prior_samples.ndim != 2 or posterior_samples.ndim != 2:
+        raise ValueError("prior_samples and posterior_samples must be two-dimensional")
+    if prior_samples.shape[1] != posterior_samples.shape[1]:
+        raise ValueError("Prior and posterior must have the same parameter count")
+    if len(parameter_labels) != prior_samples.shape[1]:
+        raise ValueError("parameter_labels must match the parameter count")
+
+    n_parameters = prior_samples.shape[1]
+    fig, axes = plt.subplots(
+        n_parameters, 1, figsize=(8, max(3, 2.8 * n_parameters)), squeeze=False
+    )
+    axes = axes[:, 0]
+    for index, label in enumerate(parameter_labels):
+        ax = axes[index]
+        prior = prior_samples[:, index]
+        posterior = posterior_samples[:, index]
+        combined = np.concatenate((prior, posterior))
+        x_grid = np.linspace(np.min(combined), np.max(combined), 300)
+        if np.ptp(combined) > 0:
+            ax.plot(x_grid, _density(prior, x_grid), label="Prior")
+            ax.plot(x_grid, _density(posterior, x_grid), label="Posterior")
+        else:
+            ax.axvline(combined[0], label="Prior and posterior")
+        ax.set_ylabel("Density")
+        ax.set_title(str(label))
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+    axes[-1].set_xlabel("Calibration parameter value")
+    fig.tight_layout()
+    os.makedirs(figures_directory, exist_ok=True)
+    path = os.path.join(figures_directory, filename)
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"Saved prior-posterior density figure to {path}")
+    return path
 
 def generate_rawData_figure(model_data, obs_data, figures_directory):
     """

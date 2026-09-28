@@ -54,6 +54,8 @@
             "posterior_predict_physical": true,
             "delta_posterior_normalized": true,
             "delta_posterior_physical": true,
+            "prior_posterior_density": true,
+            "holdout_sensitivity": true,
             "acceptance_trajectory": true,
             "step_size_plot": true
         },
@@ -62,7 +64,11 @@
             "save_calibrated_parameters": true,
             "save_model_csv": true,
             "save_model_json": true
+        },
+        "validation_options": {
+            "holdout_fractions": [0.1, 0.2, 0.3],
+            "holdout_repeats": 20,
+            "random_seed": 0
         }
     }
-    
 }
