@@ -125,6 +125,17 @@ Controls MCMC behavior:
 ### `output_settings`
 
 - Controls which plots and diagnostics are generated  
+- `figure_options.prior_posterior_density` adds a prior/posterior density comparison
+  for each calibration parameter.
+- `figure_options.holdout_sensitivity` evaluates normalized RMSE on repeated random
+  holdout subsets. Results are written to
+  `results/holdout_sensitivity_metrics.json`; fractions and repetitions are
+  configured under `output_settings.validation_options`.
+- Holdout selection protects all observations at the minimum or maximum
+  application-domain values. `figure_options.holdout_predictions` adds a grid
+  figure with one row per holdout trial and one column for the full-domain
+  posterior predictive plus one column per calibration parameter. Held-out
+  points are highlighted in every panel.
 
 ### `results_path` & `results_options`
 
@@ -167,4 +178,3 @@ Paper: https://arxiv.org/abs/2603.11960
 ### Repository Citation
 
 This repository includes a `CITATION.cff` file so that GitHub can generate a **"Cite this repository"** button automatically.
-
