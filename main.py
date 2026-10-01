@@ -461,6 +461,11 @@ def main():
                 holdout_metrics['cases'],
                 theta_labels,
                 figures_directory,
+                full_x=x_obs_phys,
+                full_y_true=y_obs_phys,
+                full_y_pred=y_post_mean_phys,
+                full_y_pred_std=y_post_std_phys,
+                full_parameter_corrections=delta_mean_phys.T,
                 filename=validation_options.get(
                     'holdout_predictions_filename',
                     'holdout_predictions.png',

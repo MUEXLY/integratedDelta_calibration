@@ -67,60 +67,103 @@ def plot_holdout_predictions(
     holdout_cases,
     parameter_labels,
     figures_directory,
+    full_x,
+    full_y_true,
+    full_y_pred,
+    full_y_pred_std,
+    full_parameter_corrections,
     filename="holdout_predictions.png",
 ):
-    """Plot held-out predictive checks and parameter corrections by case."""
+    """Plot full-domain predictive checks and corrections for each trial.
+
+    Each trial occupies one row. The first column shows the full posterior
+    predictive over the application domain, with held-out points highlighted;
+    the remaining columns show one correction field per calibration parameter.
+    """
     if not holdout_cases:
         raise ValueError("holdout_cases must not be empty")
+    full_x = np.asarray(full_x, dtype=float)
+    full_x = full_x[:, 0] if full_x.ndim > 1 else full_x
+    full_y_true = np.asarray(full_y_true, dtype=float).ravel()
+    full_y_pred = np.asarray(full_y_pred, dtype=float).ravel()
+    full_y_pred_std = np.asarray(full_y_pred_std, dtype=float).ravel()
+    full_parameter_corrections = np.asarray(
+        full_parameter_corrections, dtype=float
+    )
     n_cases = len(holdout_cases)
+    n_parameters = len(parameter_labels)
+    if not (
+        len(full_x)
+        == len(full_y_true)
+        == len(full_y_pred)
+        == len(full_y_pred_std)
+        == full_parameter_corrections.shape[0]
+    ):
+        raise ValueError("Full-domain arrays must have the same number of points")
+    if full_parameter_corrections.shape[1] != n_parameters:
+        raise ValueError("Correction columns must match parameter_labels")
+
     fig, axes = plt.subplots(
-        n_cases, 2, figsize=(13, max(4, 3.2 * n_cases)), squeeze=False
+        n_cases,
+        n_parameters + 1,
+        figsize=(5 * (n_parameters + 1), max(4, 3.2 * n_cases)),
+        squeeze=False,
+        sharex="col",
     )
 
     for row, case in enumerate(holdout_cases):
-        x_values = np.asarray(case["x"], dtype=float)
-        x_values = x_values[:, 0] if x_values.ndim > 1 else x_values
-        y_true = np.asarray(case["y_true"], dtype=float)
-        y_pred = np.asarray(case["y_pred"], dtype=float)
-        y_std = np.asarray(case.get("y_pred_std", np.zeros_like(y_pred)))
-
-        prediction_ax, correction_ax = axes[row]
-        prediction_ax.errorbar(
-            x_values,
-            y_pred,
-            yerr=2 * y_std if np.any(y_std) else None,
-            fmt="o",
-            label="Posterior prediction",
+        holdout_indices = np.asarray(case["indices"], dtype=int)
+        prediction_ax = axes[row, 0]
+        prediction_ax.fill_between(
+            full_x,
+            full_y_pred - 2 * full_y_pred_std,
+            full_y_pred + 2 * full_y_pred_std,
+            alpha=0.2,
+            label="95% posterior interval",
         )
         prediction_ax.scatter(
-            x_values, y_true, marker="x", s=55, label="Held-out observation"
+            full_x, full_y_true, color="0.35", s=18, label="Observations"
+        )
+        prediction_ax.plot(full_x, full_y_pred, label="Posterior mean")
+        prediction_ax.scatter(
+            full_x[holdout_indices],
+            full_y_true[holdout_indices],
+            color="tab:red",
+            marker="x",
+            s=55,
+            label="Held out",
         )
         prediction_ax.set_title(
-            f"fraction={case['fraction']:.2g}, case={row + 1}"
+            f"Full posterior\nfraction={case['fraction']:.2g}, trial={row + 1}"
         )
         prediction_ax.set_xlabel("Application domain")
         prediction_ax.set_ylabel("Response")
         prediction_ax.grid(True, alpha=0.3)
         prediction_ax.legend(fontsize="small")
 
-        corrections = np.asarray(
-            case.get("parameter_corrections", []), dtype=float
-        )
-        if corrections.size:
-            corrections = np.atleast_2d(corrections)
-            correction_ax.boxplot(
-                [corrections[:, index] for index in range(corrections.shape[1])],
-                labels=parameter_labels,
+        for parameter_index, label in enumerate(parameter_labels):
+            correction_ax = axes[row, parameter_index + 1]
+            correction_ax.plot(
+                full_x,
+                full_parameter_corrections[:, parameter_index],
+                color=f"C{parameter_index}",
+            )
+            correction_ax.scatter(
+                full_x[holdout_indices],
+                full_parameter_corrections[holdout_indices, parameter_index],
+                color="tab:red",
+                marker="x",
+                s=55,
+                label="Held out",
             )
             correction_ax.axhline(0, color="black", linewidth=0.8)
-            correction_ax.set_ylabel("Posterior parameter correction")
-        else:
-            correction_ax.text(
-                0.5, 0.5, "No parameter corrections provided",
-                ha="center", va="center", transform=correction_ax.transAxes,
+            correction_ax.set_title(
+                f"{label} correction\nfraction={case['fraction']:.2g}, "
+                f"trial={row + 1}"
             )
-        correction_ax.set_title("Correction at held-out points")
-        correction_ax.grid(True, axis="y", alpha=0.3)
+            correction_ax.set_xlabel("Application domain")
+            correction_ax.set_ylabel("Correction")
+            correction_ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
     os.makedirs(figures_directory, exist_ok=True)

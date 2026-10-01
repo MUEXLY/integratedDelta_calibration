@@ -133,8 +133,9 @@ Controls MCMC behavior:
   configured under `output_settings.validation_options`.
 - Holdout selection protects all observations at the minimum or maximum
   application-domain values. `figure_options.holdout_predictions` adds a grid
-  figure showing posterior predictions and parameter corrections for every
-  holdout case.
+  figure with one row per holdout trial and one column for the full-domain
+  posterior predictive plus one column per calibration parameter. Held-out
+  points are highlighted in every panel.
 
 ### `results_path` & `results_options`
 
