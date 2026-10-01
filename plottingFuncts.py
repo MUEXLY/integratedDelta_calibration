@@ -62,6 +62,75 @@ def plot_prior_posterior_densities(
     print(f"Saved prior-posterior density figure to {path}")
     return path
 
+
+def plot_holdout_predictions(
+    holdout_cases,
+    parameter_labels,
+    figures_directory,
+    filename="holdout_predictions.png",
+):
+    """Plot held-out predictive checks and parameter corrections by case."""
+    if not holdout_cases:
+        raise ValueError("holdout_cases must not be empty")
+    n_cases = len(holdout_cases)
+    fig, axes = plt.subplots(
+        n_cases, 2, figsize=(13, max(4, 3.2 * n_cases)), squeeze=False
+    )
+
+    for row, case in enumerate(holdout_cases):
+        x_values = np.asarray(case["x"], dtype=float)
+        x_values = x_values[:, 0] if x_values.ndim > 1 else x_values
+        y_true = np.asarray(case["y_true"], dtype=float)
+        y_pred = np.asarray(case["y_pred"], dtype=float)
+        y_std = np.asarray(case.get("y_pred_std", np.zeros_like(y_pred)))
+
+        prediction_ax, correction_ax = axes[row]
+        prediction_ax.errorbar(
+            x_values,
+            y_pred,
+            yerr=2 * y_std if np.any(y_std) else None,
+            fmt="o",
+            label="Posterior prediction",
+        )
+        prediction_ax.scatter(
+            x_values, y_true, marker="x", s=55, label="Held-out observation"
+        )
+        prediction_ax.set_title(
+            f"fraction={case['fraction']:.2g}, case={row + 1}"
+        )
+        prediction_ax.set_xlabel("Application domain")
+        prediction_ax.set_ylabel("Response")
+        prediction_ax.grid(True, alpha=0.3)
+        prediction_ax.legend(fontsize="small")
+
+        corrections = np.asarray(
+            case.get("parameter_corrections", []), dtype=float
+        )
+        if corrections.size:
+            corrections = np.atleast_2d(corrections)
+            correction_ax.boxplot(
+                [corrections[:, index] for index in range(corrections.shape[1])],
+                labels=parameter_labels,
+            )
+            correction_ax.axhline(0, color="black", linewidth=0.8)
+            correction_ax.set_ylabel("Posterior parameter correction")
+        else:
+            correction_ax.text(
+                0.5, 0.5, "No parameter corrections provided",
+                ha="center", va="center", transform=correction_ax.transAxes,
+            )
+        correction_ax.set_title("Correction at held-out points")
+        correction_ax.grid(True, axis="y", alpha=0.3)
+
+    fig.tight_layout()
+    os.makedirs(figures_directory, exist_ok=True)
+    path = os.path.join(figures_directory, filename)
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"Saved holdout prediction figure to {path}")
+    return path
+
+
 def generate_rawData_figure(model_data, obs_data, figures_directory):
     """
     Create subplots for each theta parameter showing:

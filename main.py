@@ -452,7 +452,20 @@ def main():
             ),
             n_repeats=validation_options.get('holdout_repeats', 20),
             random_state=validation_options.get('random_seed', 0),
+            x_domain=x_obs_phys,
+            y_pred_std=y_post_std_phys,
+            parameter_corrections=delta_mean_phys.T,
         )
+        if figure_options.get('holdout_predictions', False):
+            plot_holdout_predictions(
+                holdout_metrics['cases'],
+                theta_labels,
+                figures_directory,
+                filename=validation_options.get(
+                    'holdout_predictions_filename',
+                    'holdout_predictions.png',
+                ),
+            )
         os.makedirs(results_directory, exist_ok=True)
         holdout_json_path = os.path.join(
             results_directory, 'holdout_sensitivity_metrics.json'

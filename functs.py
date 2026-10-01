@@ -12,13 +12,17 @@ def holdout_sensitivity_metric(
     holdout_fractions=(0.1, 0.2, 0.3),
     n_repeats=20,
     random_state=0,
+    x_domain=None,
+    y_pred_std=None,
+    parameter_corrections=None,
 ):
     """Estimate predictive sensitivity to withholding observations.
 
     Predictions are evaluated on randomly withheld observations for each
-    requested fraction.  ``sensitivity`` is the change in normalized RMSE
-    relative to the score on all observations; positive values indicate
-    degradation when observations are withheld.
+    requested fraction.  Application-domain minimum and maximum points are
+    protected from holdout selection. ``sensitivity`` is the change in
+    normalized RMSE relative to the score on all observations; positive values
+    indicate degradation when observations are withheld.
     """
     y_true = np.asarray(y_true, dtype=float).ravel()
     y_pred = np.asarray(y_pred, dtype=float).ravel()
@@ -29,6 +33,34 @@ def holdout_sensitivity_metric(
     if n_repeats < 1:
         raise ValueError("n_repeats must be positive")
 
+    if x_domain is None:
+        x_domain = np.arange(y_true.size, dtype=float)
+    x_domain = np.asarray(x_domain, dtype=float)
+    if x_domain.ndim == 1:
+        x_domain = x_domain[:, None]
+    if x_domain.shape[0] != y_true.size:
+        raise ValueError("x_domain must have one row per observation")
+    if y_pred_std is not None:
+        y_pred_std = np.asarray(y_pred_std, dtype=float).ravel()
+        if y_pred_std.shape != y_true.shape:
+            raise ValueError("y_pred_std must have one value per observation")
+    if parameter_corrections is not None:
+        parameter_corrections = np.asarray(parameter_corrections, dtype=float)
+        if parameter_corrections.shape[0] != y_true.size:
+            raise ValueError(
+                "parameter_corrections must have one row per observation"
+            )
+
+    domain_min = np.min(x_domain, axis=0)
+    domain_max = np.max(x_domain, axis=0)
+    endpoint_mask = np.any(
+        np.isclose(x_domain, domain_min) | np.isclose(x_domain, domain_max),
+        axis=1,
+    )
+    eligible_indices = np.flatnonzero(~endpoint_mask)
+    if eligible_indices.size == 0:
+        raise ValueError("No interior application-domain points are available")
+
     fractions = tuple(float(fraction) for fraction in holdout_fractions)
     if any(fraction <= 0 or fraction >= 1 for fraction in fractions):
         raise ValueError("holdout fractions must be between zero and one")
@@ -38,14 +70,34 @@ def holdout_sensitivity_metric(
     full_nrmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)) / scale)
     rng = np.random.default_rng(random_state)
     results = {}
+    cases = []
 
     for fraction in fractions:
         n_holdout = max(1, int(round(fraction * y_true.size)))
+        if n_holdout > eligible_indices.size:
+            raise ValueError(
+                f"Holdout size ({n_holdout}) exceeds available interior points "
+                f"({eligible_indices.size})"
+            )
         scores = []
         for _ in range(n_repeats):
-            holdout = rng.choice(y_true.size, size=n_holdout, replace=False)
+            holdout = rng.choice(eligible_indices, size=n_holdout, replace=False)
             score = np.sqrt(np.mean((y_true[holdout] - y_pred[holdout]) ** 2))
             scores.append(float(score / scale))
+            case = {
+                "fraction": fraction,
+                "indices": holdout.tolist(),
+                "x": x_domain[holdout].tolist(),
+                "y_true": y_true[holdout].tolist(),
+                "y_pred": y_pred[holdout].tolist(),
+            }
+            if y_pred_std is not None:
+                case["y_pred_std"] = y_pred_std[holdout].tolist()
+            if parameter_corrections is not None:
+                case["parameter_corrections"] = (
+                    parameter_corrections[holdout].tolist()
+                )
+            cases.append(case)
         mean_score = float(np.mean(scores))
         results[str(fraction)] = {
             "holdout_count": n_holdout,
@@ -59,6 +111,9 @@ def holdout_sensitivity_metric(
         "holdout_results": results,
         "n_repeats": int(n_repeats),
         "scale": float(scale),
+        "protected_indices": np.flatnonzero(endpoint_mask).tolist(),
+        "eligible_indices": eligible_indices.tolist(),
+        "cases": cases,
     }
 
 def rbf_kernel(X, Y, ell=1.0, var=1.0):

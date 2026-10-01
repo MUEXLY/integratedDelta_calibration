@@ -131,6 +131,10 @@ Controls MCMC behavior:
   holdout subsets. Results are written to
   `results/holdout_sensitivity_metrics.json`; fractions and repetitions are
   configured under `output_settings.validation_options`.
+- Holdout selection protects all observations at the minimum or maximum
+  application-domain values. `figure_options.holdout_predictions` adds a grid
+  figure showing posterior predictions and parameter corrections for every
+  holdout case.
 
 ### `results_path` & `results_options`
 
