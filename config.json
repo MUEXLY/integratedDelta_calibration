@@ -27,6 +27,8 @@
         "observation_labels":{
                 "obs1": "y"
         },
+        "observation_set_label": "Observation",
+        "simulation_set_label": "Simulation",
         "application_domain_labels":{
                 "domain1": "x"
         }
@@ -54,6 +56,10 @@
             "posterior_predict_physical": true,
             "delta_posterior_normalized": true,
             "delta_posterior_physical": true,
+            "prior_posterior_density": true,
+            "holdout_sensitivity": true,
+            "holdout_predictions": true,
+            "holdout_nrmse_sensitivity": true,
             "acceptance_trajectory": true,
             "step_size_plot": true
         },
@@ -62,7 +68,13 @@
             "save_calibrated_parameters": true,
             "save_model_csv": true,
             "save_model_json": true
+        },
+        "validation_options": {
+            "holdout_fractions": [0.1, 0.2, 0.3],
+            "holdout_repeats": 20,
+            "random_seed": 0,
+            "holdout_predictions_filename": "holdout_predictions.png",
+            "holdout_nrmse_filename": "holdout_nrmse_sensitivity.png"
         }
     }
-    
 }
