@@ -57,6 +57,7 @@
             "prior_posterior_density": true,
             "holdout_sensitivity": true,
             "holdout_predictions": true,
+            "holdout_nrmse_sensitivity": true,
             "acceptance_trajectory": true,
             "step_size_plot": true
         },
@@ -70,7 +71,8 @@
             "holdout_fractions": [0.1, 0.2, 0.3],
             "holdout_repeats": 20,
             "random_seed": 0,
-            "holdout_predictions_filename": "holdout_predictions.png"
+            "holdout_predictions_filename": "holdout_predictions.png",
+            "holdout_nrmse_filename": "holdout_nrmse_sensitivity.png"
         }
     }
 }

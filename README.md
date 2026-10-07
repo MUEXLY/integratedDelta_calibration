@@ -136,6 +136,10 @@ Controls MCMC behavior:
   figure with one row per holdout trial and one column for the full-domain
   posterior predictive plus one column per calibration parameter. Held-out
   points are highlighted in every panel.
+- `figure_options.holdout_nrmse_sensitivity` adds
+  `figures/holdout_nrmse_sensitivity.png`, which aggregates every holdout trial
+  at each withheld fraction and plots mean NRMSE with +/- 1 SD, alongside the
+  full-dataset NRMSE baseline.
 
 ### `results_path` & `results_options`
 

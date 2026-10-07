@@ -174,6 +174,69 @@ def plot_holdout_predictions(
     return path
 
 
+def plot_holdout_nrmse_sensitivity(
+    holdout_metrics,
+    figures_directory,
+    filename="holdout_nrmse_sensitivity.png",
+):
+    """Plot aggregate NRMSE sensitivity across the full holdout experiment."""
+    holdout_results = holdout_metrics.get("holdout_results", {})
+    if not holdout_results:
+        raise ValueError("holdout_metrics contains no holdout results")
+
+    sorted_results = sorted(
+        ((float(fraction), result) for fraction, result in holdout_results.items()),
+        key=lambda item: item[0],
+    )
+    fractions = np.array([item[0] for item in sorted_results], dtype=float)
+    result_values = [item[1] for item in sorted_results]
+    means = np.array([result["nrmse"] for result in result_values])
+    spreads = np.array([result["nrmse_std"] for result in result_values])
+    full_nrmse = float(holdout_metrics["full_nrmse"])
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.axhline(
+        full_nrmse,
+        color="black",
+        linestyle="--",
+        linewidth=1.2,
+        label=f"Full dataset (NRMSE={full_nrmse:.3f})",
+    )
+    ax.fill_between(
+        fractions,
+        means - spreads,
+        means + spreads,
+        color="tab:blue",
+        alpha=0.18,
+        label="Holdout mean +/- 1 SD",
+    )
+    ax.errorbar(
+        fractions,
+        means,
+        yerr=spreads,
+        color="tab:blue",
+        marker="o",
+        linewidth=2,
+        capsize=4,
+        label="Mean holdout NRMSE",
+    )
+    ax.set_xticks(fractions)
+    ax.set_xticklabels([f"{fraction:.0%}" for fraction in fractions])
+    ax.set_xlabel("Fraction of observations withheld")
+    ax.set_ylabel("Normalized RMSE")
+    ax.set_title("Holdout sensitivity across the application domain")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+
+    os.makedirs(figures_directory, exist_ok=True)
+    path = os.path.join(figures_directory, filename)
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"Saved holdout NRMSE sensitivity figure to {path}")
+    return path
+
+
 def generate_rawData_figure(model_data, obs_data, figures_directory):
     """
     Create subplots for each theta parameter showing:

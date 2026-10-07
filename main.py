@@ -471,6 +471,15 @@ def main():
                     'holdout_predictions.png',
                 ),
             )
+        if figure_options.get('holdout_nrmse_sensitivity', False):
+            plot_holdout_nrmse_sensitivity(
+                holdout_metrics,
+                figures_directory,
+                filename=validation_options.get(
+                    'holdout_nrmse_filename',
+                    'holdout_nrmse_sensitivity.png',
+                ),
+            )
         os.makedirs(results_directory, exist_ok=True)
         holdout_json_path = os.path.join(
             results_directory, 'holdout_sensitivity_metrics.json'
