@@ -141,6 +141,13 @@ Controls MCMC behavior:
   at each withheld fraction and plots mean NRMSE with +/- 1 SD, alongside the
   full-dataset NRMSE baseline.
 
+### `label_settings`
+
+- `observation_set_label` controls the label used for the observation data
+  in generated figures.
+- `simulation_set_label` controls the label used for simulator data and
+  predictive-fit titles.
+
 ### `results_path` & `results_options`
 
 *(In development)*  

@@ -27,6 +27,8 @@
         "observation_labels":{
                 "obs1": "y"
         },
+        "observation_set_label": "Observation",
+        "simulation_set_label": "Simulation",
         "application_domain_labels":{
                 "domain1": "x"
         }

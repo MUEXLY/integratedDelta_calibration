@@ -237,7 +237,13 @@ def plot_holdout_nrmse_sensitivity(
     return path
 
 
-def generate_rawData_figure(model_data, obs_data, figures_directory):
+def generate_rawData_figure(
+    model_data,
+    obs_data,
+    figures_directory,
+    observation_set_label="Observation",
+    simulation_set_label="Simulation",
+):
     """
     Create subplots for each theta parameter showing:
     - X-axis: application domain (x values)
@@ -279,7 +285,15 @@ def generate_rawData_figure(model_data, obs_data, figures_directory):
         
         # Plot observed data
         if obs_data is not None and observation_y_columns and observation_y_columns[0] in obs_data.columns and observation_x_columns and observation_x_columns[0] in obs_data.columns:
-            ax.scatter(obs_data[observation_x_columns[0]], obs_data[observation_y_columns[0]], color='red', label='Observed Data', alpha=0.8, s=30, edgecolors='black')
+            ax.scatter(
+                obs_data[observation_x_columns[0]],
+                obs_data[observation_y_columns[0]],
+                color='red',
+                label=f'{observation_set_label} data',
+                alpha=0.8,
+                s=30,
+                edgecolors='black',
+            )
         
         ax.set_xlabel(f'{x_col}')
         ax.set_ylabel(f'{y_col}')
