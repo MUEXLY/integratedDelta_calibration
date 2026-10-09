@@ -914,7 +914,7 @@ def main():
                     x_sorted_phys,
                     theta_pred,
                     linewidth=2,
-                    label=rf"$\theta_{{{k+1}}}^{{pred}}(x)$"
+                    label=rf"$\theta_{{{k+1}}}^{{*pred}}(x)$"
                 )
 
             # for j in range(5):

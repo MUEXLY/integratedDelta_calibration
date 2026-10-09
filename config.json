@@ -2,16 +2,16 @@
     "calibration_settings":{
         "N_mcmc": 10000,
         "burn_in": 1000,
-        "mh_scale_delta_prior": 0.5,
+        "mh_scale_delta_prior": 0.15,
         "theta_initialization":"fixed",
         "posterior_predictive_samples": 200,
         "allow_singular_covariance": true
     },
     "input_settings":{
-        "input_delimiter": "\t",
+        "input_delimiter": " ",
         "input_header": true,
-        "input_observations_path": "./observationData/",
-        "input_model_path": "./modelData/"
+        "input_observations_path": "./md-ddd_edgDipole/observationData/",
+        "input_model_path": "./md-ddd_edgDipole/modelData/"
     },
     "label_settings":{
         "custom_labels": true,
@@ -27,8 +27,8 @@
         "observation_labels":{
                 "obs1": "y"
         },
-        "observation_set_label": "Observation",
-        "simulation_set_label": "Simulation",
+        "observation_set_label": "Synthetic Observation",
+        "simulation_set_label": "Synthetic Simulation",
         "application_domain_labels":{
                 "domain1": "x"
         }
@@ -39,7 +39,7 @@
         "known_theta_form": "constant",
         "known_theta_form_params": {
             "constant": {
-                "values": [1.5,1.75]
+                "values": [1.0,1.0]
             },
             "trig_funct": {
                 "functions": ["sin", "cos"]
