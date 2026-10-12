@@ -502,6 +502,10 @@ def main():
             external_predictions.append(mean * y_sim_std + y_sim_mean)
 
         plot_external_validation(
+            x_sim_phys,
+            y_sim_phys,
+            x_obs_phys,
+            y_obs_phys,
             x_obs_phys,
             y_post_mean_phys,
             y_post_std_phys,
@@ -511,7 +515,9 @@ def main():
             theta_labels,
             external_theta_phys,
             external_correction_phys,
-            figures_directory,
+            observation_set_label=observation_set_label,
+            simulation_set_label=simulation_set_label,
+            figures_directory=figures_directory,
             filename=external_validation.get(
                 "figure_filename", "external_validation.png"
             ),

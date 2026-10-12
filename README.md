@@ -157,6 +157,9 @@ any unit conversion with `x_column`, `y_column`, `parameter_columns`, and
 `y_scale`. The pass writes `figures/external_validation.png` and
 `results/external_validation_predictions.csv`, including the learned
 discrepancy correction evaluated at each external application-domain point.
+The external-validation figure also includes the original simulation and
+observation datasets; external validation points use the configured simulation
+set label. Each calibration parameter is shown in its own panel and y-axis.
 
 ### `results_path` & `results_options`
 

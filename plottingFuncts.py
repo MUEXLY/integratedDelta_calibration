@@ -238,6 +238,10 @@ def plot_holdout_nrmse_sensitivity(
 
 
 def plot_external_validation(
+    x_sim,
+    y_sim,
+    x_observation,
+    y_observation,
     x_obs,
     y_post_mean,
     y_post_std,
@@ -248,6 +252,8 @@ def plot_external_validation(
     external_parameters,
     parameter_corrections,
     figures_directory,
+    observation_set_label="Observation",
+    simulation_set_label="Simulation",
     filename="external_validation.png",
 ):
     """Plot external validation points against the calibrated prediction."""
@@ -260,10 +266,38 @@ def plot_external_validation(
     external_parameters = np.asarray(external_parameters, dtype=float)
     parameter_corrections = np.asarray(parameter_corrections, dtype=float)
 
-    fig, (prediction_ax, parameter_ax) = plt.subplots(
-        1, 2, figsize=(14, 6), gridspec_kw={"width_ratios": [2, 1]}
+    x_sim = np.asarray(x_sim, dtype=float).ravel()
+    y_sim = np.asarray(y_sim, dtype=float).ravel()
+    x_observation = np.asarray(x_observation, dtype=float).ravel()
+    y_observation = np.asarray(y_observation, dtype=float).ravel()
+
+    n_parameters = len(parameter_names)
+    fig, axes = plt.subplots(
+        1,
+        n_parameters + 1,
+        figsize=(7 + 3.2 * n_parameters, 6),
+        gridspec_kw={"width_ratios": [2.2] + [1] * n_parameters},
+        squeeze=False,
     )
+    prediction_ax = axes[0, 0]
+    parameter_axes = axes[0, 1:]
     order = np.argsort(x_obs)
+    prediction_ax.scatter(
+        x_sim,
+        y_sim,
+        color="0.35",
+        marker="x",
+        alpha=0.45,
+        label=f"{simulation_set_label} runs",
+    )
+    prediction_ax.scatter(
+        x_observation,
+        y_observation,
+        color="black",
+        s=35,
+        alpha=0.7,
+        label=f"{observation_set_label} data",
+    )
     prediction_ax.plot(
         x_obs[order],
         y_post_mean[order],
@@ -284,43 +318,54 @@ def plot_external_validation(
         color="tab:red",
         marker="x",
         s=55,
-        label="External validation data",
+        label=f"{simulation_set_label} runs",
     )
     prediction_ax.scatter(
         x_external,
         y_external_pred,
         color="tab:green",
-        marker="o",
-        facecolors="none",
+        marker="D",
+        s=48,
+        edgecolors="black",
         label="Emulator at corrected parameters",
     )
+    for x_value, observed, predicted in zip(
+        x_external, y_external, y_external_pred
+    ):
+        prediction_ax.plot(
+            [x_value, x_value],
+            [observed, predicted],
+            color="tab:green",
+            alpha=0.35,
+            linewidth=1,
+        )
     prediction_ax.set_xlabel("Application domain")
     prediction_ax.set_ylabel("Critical stress")
     prediction_ax.set_title("External validation against calibration posterior")
     prediction_ax.grid(True, alpha=0.3)
     prediction_ax.legend()
 
-    n_parameters = len(parameter_names)
-    positions = np.arange(n_parameters)
-    width = 0.38
-    parameter_ax.bar(
-        positions - width / 2,
-        np.mean(external_parameters, axis=0),
-        width,
-        label="External parameters",
-    )
-    parameter_ax.bar(
-        positions + width / 2,
-        np.mean(external_parameters + parameter_corrections, axis=0),
-        width,
-        label="External parameters + correction",
-    )
-    parameter_ax.set_xticks(positions)
-    parameter_ax.set_xticklabels(parameter_names)
-    parameter_ax.set_ylabel("Parameter value")
-    parameter_ax.set_title("External parameters and corrected values")
-    parameter_ax.grid(True, axis="y", alpha=0.3)
-    parameter_ax.legend()
+    for index, (parameter_ax, parameter_name) in enumerate(
+        zip(parameter_axes, parameter_names)
+    ):
+        parameter_ax.scatter(
+            np.zeros(len(external_parameters)),
+            external_parameters[:, index],
+            alpha=0.65,
+            label="External parameter",
+        )
+        parameter_ax.scatter(
+            np.ones(len(external_parameters)),
+            (external_parameters + parameter_corrections)[:, index],
+            alpha=0.65,
+            label="Parameter + correction",
+        )
+        parameter_ax.set_xticks([0, 1])
+        parameter_ax.set_xticklabels(["External", "Corrected"], rotation=30)
+        parameter_ax.set_ylabel("Parameter value")
+        parameter_ax.set_title(str(parameter_name))
+        parameter_ax.grid(True, axis="y", alpha=0.3)
+        parameter_ax.legend(fontsize="small")
 
     fig.tight_layout()
     os.makedirs(figures_directory, exist_ok=True)
