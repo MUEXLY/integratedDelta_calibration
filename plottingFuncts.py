@@ -237,6 +237,100 @@ def plot_holdout_nrmse_sensitivity(
     return path
 
 
+def plot_external_validation(
+    x_obs,
+    y_post_mean,
+    y_post_std,
+    x_external,
+    y_external,
+    y_external_pred,
+    parameter_names,
+    external_parameters,
+    parameter_corrections,
+    figures_directory,
+    filename="external_validation.png",
+):
+    """Plot external validation points against the calibrated prediction."""
+    x_obs = np.asarray(x_obs, dtype=float).ravel()
+    y_post_mean = np.asarray(y_post_mean, dtype=float).ravel()
+    y_post_std = np.asarray(y_post_std, dtype=float).ravel()
+    x_external = np.asarray(x_external, dtype=float).ravel()
+    y_external = np.asarray(y_external, dtype=float).ravel()
+    y_external_pred = np.asarray(y_external_pred, dtype=float).ravel()
+    external_parameters = np.asarray(external_parameters, dtype=float)
+    parameter_corrections = np.asarray(parameter_corrections, dtype=float)
+
+    fig, (prediction_ax, parameter_ax) = plt.subplots(
+        1, 2, figsize=(14, 6), gridspec_kw={"width_ratios": [2, 1]}
+    )
+    order = np.argsort(x_obs)
+    prediction_ax.plot(
+        x_obs[order],
+        y_post_mean[order],
+        color="tab:blue",
+        label="Calibration posterior predictive",
+    )
+    prediction_ax.fill_between(
+        x_obs[order],
+        y_post_mean[order] - 2 * y_post_std[order],
+        y_post_mean[order] + 2 * y_post_std[order],
+        color="tab:blue",
+        alpha=0.2,
+        label="95% posterior interval",
+    )
+    prediction_ax.scatter(
+        x_external,
+        y_external,
+        color="tab:red",
+        marker="x",
+        s=55,
+        label="External validation data",
+    )
+    prediction_ax.scatter(
+        x_external,
+        y_external_pred,
+        color="tab:green",
+        marker="o",
+        facecolors="none",
+        label="Emulator at corrected parameters",
+    )
+    prediction_ax.set_xlabel("Application domain")
+    prediction_ax.set_ylabel("Critical stress")
+    prediction_ax.set_title("External validation against calibration posterior")
+    prediction_ax.grid(True, alpha=0.3)
+    prediction_ax.legend()
+
+    n_parameters = len(parameter_names)
+    positions = np.arange(n_parameters)
+    width = 0.38
+    parameter_ax.bar(
+        positions - width / 2,
+        np.mean(external_parameters, axis=0),
+        width,
+        label="External parameters",
+    )
+    parameter_ax.bar(
+        positions + width / 2,
+        np.mean(external_parameters + parameter_corrections, axis=0),
+        width,
+        label="External parameters + correction",
+    )
+    parameter_ax.set_xticks(positions)
+    parameter_ax.set_xticklabels(parameter_names)
+    parameter_ax.set_ylabel("Parameter value")
+    parameter_ax.set_title("External parameters and corrected values")
+    parameter_ax.grid(True, axis="y", alpha=0.3)
+    parameter_ax.legend()
+
+    fig.tight_layout()
+    os.makedirs(figures_directory, exist_ok=True)
+    path = os.path.join(figures_directory, filename)
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"Saved external validation figure to {path}")
+    return path
+
+
 def generate_rawData_figure(
     model_data,
     obs_data,

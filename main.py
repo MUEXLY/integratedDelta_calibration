@@ -442,6 +442,93 @@ def main():
 
     theta_post_std_phys = delta_std_phys
 
+    external_validation = validation_options.get("external_validation", {})
+    if external_validation.get("enabled", False):
+        external_data = pd.read_csv(external_validation["csv_path"])
+        parameter_mapping = external_validation["parameter_columns"]
+        missing_columns = [
+            column
+            for column in [
+                external_validation["x_column"],
+                external_validation["y_column"],
+                *parameter_mapping.values(),
+            ]
+            if column not in external_data.columns
+        ]
+        if missing_columns:
+            raise ValueError(
+                f"External validation CSV is missing columns: {missing_columns}"
+            )
+
+        external_x_phys = external_data[external_validation["x_column"]].to_numpy(
+            dtype=float
+        )
+        external_y_phys = (
+            external_data[external_validation["y_column"]].to_numpy(dtype=float)
+            * external_validation.get("y_scale", 1.0)
+        )
+        external_theta_phys = external_data[
+            list(parameter_mapping.values())
+        ].to_numpy(dtype=float)
+        external_theta_normalized = (
+            external_theta_phys - theta_min
+        ) / theta_range
+        external_x_normalized = (
+            external_x_phys - x_sim_min
+        ) / (x_sim_max - x_sim_min)
+        external_correction_phys = np.column_stack(
+            [
+                np.interp(
+                    external_x_phys,
+                    x_obs_phys.ravel(),
+                    delta_mean_phys[k],
+                )
+                for k in range(dtheta)
+            ]
+        )
+        external_correction_normalized = (
+            external_correction_phys / theta_range
+        )
+        external_predictions = []
+        for row in range(len(external_data)):
+            theta_input = external_theta_normalized[row] + (
+                external_correction_normalized[row]
+            )
+            mean, _ = eta_predict(
+                np.atleast_1d(external_x_normalized[row]),
+                theta_input,
+                gp_eta,
+            )
+            external_predictions.append(mean * y_sim_std + y_sim_mean)
+
+        plot_external_validation(
+            x_obs_phys,
+            y_post_mean_phys,
+            y_post_std_phys,
+            external_x_phys,
+            external_y_phys,
+            external_predictions,
+            theta_labels,
+            external_theta_phys,
+            external_correction_phys,
+            figures_directory,
+            filename=external_validation.get(
+                "figure_filename", "external_validation.png"
+            ),
+        )
+        external_results_path = os.path.join(
+            results_directory, "external_validation_predictions.csv"
+        )
+        os.makedirs(results_directory, exist_ok=True)
+        external_output = external_data.copy()
+        external_output["posterior_predictive"] = external_predictions
+        for index, label in enumerate(theta_labels):
+            external_output[f"{label}_learned_correction"] = (
+                external_correction_phys[:, index]
+            )
+        external_output.to_csv(external_results_path, index=False)
+        print(f"Saved external validation predictions to {external_results_path}")
+
     if figure_options.get('prior_posterior_density', False):
         posterior_start = min(max(burnin, 0), Nmcmc - 1)
         posterior_theta_samples = (

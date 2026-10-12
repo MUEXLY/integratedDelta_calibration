@@ -10,8 +10,8 @@
     "input_settings":{
         "input_delimiter": " ",
         "input_header": true,
-        "input_observations_path": "./md-ddd_edgDipole/observationData/",
-        "input_model_path": "./md-ddd_edgDipole/modelData/"
+        "input_observations_path": "./md-ddd_edgeDipole/observationData/",
+        "input_model_path": "./md-ddd_edgeDipole/modelData/"
     },
     "label_settings":{
         "custom_labels": true,
@@ -74,7 +74,20 @@
             "holdout_repeats": 20,
             "random_seed": 0,
             "holdout_predictions_filename": "holdout_predictions.png",
-            "holdout_nrmse_filename": "holdout_nrmse_sensitivity.png"
+            "holdout_nrmse_filename": "holdout_nrmse_sensitivity.png",
+            "external_validation": {
+                "enabled": true,
+                "csv_path": "/home/liammyhill/Desktop/box/calibrationResults/crss_Calibration/edge/integratedDeltaValidation/outputs/crss_pa_results.csv",
+                "x_column": "measuredSeparation(b)",
+                "y_column": "crss_pa",
+                "y_scale": 1.0e-6,
+                "parameter_columns": {
+                    "coreSize": "coreSize",
+                    "mu": "mu_0",
+                    "nu": "nu"
+                },
+                "figure_filename": "external_validation.png"
+            }
         }
     }
 }

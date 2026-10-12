@@ -148,6 +148,16 @@ Controls MCMC behavior:
 - `simulation_set_label` controls the label used for simulator data and
   predictive-fit titles.
 
+### External validation
+
+`output_settings.validation_options.external_validation` enables an opt-in
+validation pass over a separate CSV. The CSV is read after calibration and is
+never included in emulator training or MCMC. Configure its column mapping and
+any unit conversion with `x_column`, `y_column`, `parameter_columns`, and
+`y_scale`. The pass writes `figures/external_validation.png` and
+`results/external_validation_predictions.csv`, including the learned
+discrepancy correction evaluated at each external application-domain point.
+
 ### `results_path` & `results_options`
 
 *(In development)*  
