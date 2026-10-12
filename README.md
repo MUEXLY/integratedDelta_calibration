@@ -125,6 +125,46 @@ Controls MCMC behavior:
 ### `output_settings`
 
 - Controls which plots and diagnostics are generated  
+- `figure_options.prior_posterior_density` adds a prior/posterior density comparison
+  for each calibration parameter.
+- `figure_options.holdout_sensitivity` evaluates normalized RMSE on repeated random
+  holdout subsets. Results are written to
+  `results/holdout_sensitivity_metrics.json`; fractions and repetitions are
+  configured under `output_settings.validation_options`.
+- Holdout selection protects all observations at the minimum or maximum
+  application-domain values. `figure_options.holdout_predictions` adds a grid
+  figure with one row per holdout trial and one column for the full-domain
+  posterior predictive plus one column per calibration parameter. Held-out
+  points are highlighted in every panel.
+- `figure_options.holdout_nrmse_sensitivity` adds
+  `figures/holdout_nrmse_sensitivity.png`, which aggregates every holdout trial
+  at each withheld fraction and plots mean NRMSE with +/- 1 SD, alongside the
+  full-dataset NRMSE baseline.
+- When `figure_options.holdout_sensitivity` is `true`, each holdout trial is
+  refit using only retained observations and scored only on withheld interior
+  observations. `validation_options.holdout_n_mcmc` and
+  `holdout_burn_in` control the additional trial sampler cost. When it is
+  `false`, calibration is performed once and no holdout refits are run.
+
+### `label_settings`
+
+- `observation_set_label` controls the label used for the observation data
+  in generated figures.
+- `simulation_set_label` controls the label used for simulator data and
+  predictive-fit titles.
+
+### External validation
+
+`output_settings.validation_options.external_validation` enables an opt-in
+validation pass over a separate CSV. The CSV is read after calibration and is
+never included in emulator training or MCMC. Configure its column mapping and
+any unit conversion with `x_column`, `y_column`, `parameter_columns`, and
+`y_scale`. The pass writes `figures/external_validation.png` and
+`results/external_validation_predictions.csv`, including the learned
+discrepancy correction evaluated at each external application-domain point.
+The external-validation figure also includes the original simulation and
+observation datasets; external validation points use the configured simulation
+set label. Each calibration parameter is shown in its own panel and y-axis.
 
 ### `results_path` & `results_options`
 
@@ -167,4 +207,3 @@ Paper: https://arxiv.org/abs/2603.11960
 ### Repository Citation
 
 This repository includes a `CITATION.cff` file so that GitHub can generate a **"Cite this repository"** button automatically.
-
