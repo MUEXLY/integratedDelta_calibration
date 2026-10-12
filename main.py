@@ -549,18 +549,36 @@ def main():
         )
 
     if figure_options.get('holdout_sensitivity', False):
-        holdout_metrics = holdout_sensitivity_metric(
+        holdout_metrics = holdout_sensitivity_refit(
+            x_obs,
+            y_obs,
+            x_obs_phys,
             y_obs_phys,
-            y_post_mean_phys,
+            theta_fixed,
+            gp_eta,
+            dtheta,
             holdout_fractions=validation_options.get(
                 'holdout_fractions', (0.1, 0.2, 0.3)
             ),
             n_repeats=validation_options.get('holdout_repeats', 20),
+            n_mcmc=validation_options.get(
+                'holdout_n_mcmc', max(1000, calibration_settings["N_mcmc"] // 5)
+            ),
+            burn_in=validation_options.get(
+                'holdout_burn_in', max(250, burnin // 2)
+            ),
+            mh_scale_delta=calibration_settings["mh_scale_delta_prior"],
+            allow_singular_covariance=allow_singular_covariance,
             random_state=validation_options.get('random_seed', 0),
-            x_domain=x_obs_phys,
-            y_pred_std=y_post_std_phys,
-            parameter_corrections=delta_mean_phys.T,
         )
+        full_scale = np.ptp(y_obs_phys)
+        full_scale = full_scale if full_scale > 0 else 1.0
+        holdout_metrics["full_nrmse"] = float(
+            np.sqrt(np.mean((y_obs_phys - y_post_mean_phys) ** 2))
+            / full_scale
+        )
+        for result in holdout_metrics["holdout_results"].values():
+            result["sensitivity"] = result["nrmse"] - holdout_metrics["full_nrmse"]
         if figure_options.get('holdout_predictions', False):
             plot_holdout_predictions(
                 holdout_metrics['cases'],

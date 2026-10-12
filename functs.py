@@ -116,6 +116,184 @@ def holdout_sensitivity_metric(
         "cases": cases,
     }
 
+
+def run_delta_sampler(
+    x_obs,
+    y_obs,
+    theta,
+    gp_eta,
+    dtheta,
+    n_mcmc,
+    burn_in,
+    mh_scale_delta,
+    allow_singular_covariance=False,
+):
+    """Run the discrepancy sampler for one calibration training subset."""
+    x_obs = np.asarray(x_obs, dtype=float)
+    y_obs = np.asarray(y_obs, dtype=float).ravel()
+    delta = np.zeros((dtheta, len(x_obs)))
+    ell_delta = 0.3 * np.ones(dtheta)
+    var_delta = 0.05 * np.ones(dtheta)
+    sigma2 = 0.02**2
+    delta_chain = np.zeros((n_mcmc, dtheta, len(x_obs)))
+
+    prior_ell = {"mu": -1.0, "sigma": 1.0}
+    prior_var = {"mu": -2.0, "sigma": 1.0}
+    mh_scales = {"log_ell_delta": 0.1, "log_var_delta": 0.1}
+    accept_delta = np.zeros(dtheta)
+    target_accept = 0.35
+
+    for iteration in range(n_mcmc):
+        for k in range(dtheta):
+            delta, accepted = mh_update_delta_k(
+                k, delta, theta, ell_delta[k], var_delta[k],
+                x_obs, y_obs, gp_eta, sigma2, mh_scale_delta
+            )
+            accept_delta[k] += accepted
+
+        if iteration < burn_in and (iteration + 1) % 50 == 0:
+            mean_accept = np.mean(accept_delta / (iteration + 1))
+            mh_scale_delta *= np.exp(0.05 * (mean_accept - target_accept))
+
+        for k in range(dtheta):
+            ell_delta[k], var_delta[k], _ = mh_update_delta_hyperparams(
+                delta[k], ell_delta[k], var_delta[k], x_obs,
+                prior_ell, prior_var, mh_scales,
+                allow_singular_covariance=allow_singular_covariance,
+            )
+        sigma2 = gibbs_sigma2(
+            y_obs, x_obs, theta, delta, gp_eta, 2.0, 0.5
+        )
+        delta_chain[iteration] = delta
+
+    return delta_chain, ell_delta, var_delta
+
+
+def holdout_sensitivity_refit(
+    x_obs,
+    y_obs,
+    x_display,
+    y_display,
+    theta,
+    gp_eta,
+    dtheta,
+    holdout_fractions=(0.1, 0.2, 0.3),
+    n_repeats=20,
+    n_mcmc=2000,
+    burn_in=500,
+    mh_scale_delta=0.5,
+    allow_singular_covariance=False,
+    random_state=0,
+):
+    """Run true refit-based holdout sensitivity analysis.
+
+    Each trial fits only retained observations and evaluates predictions only
+    at withheld interior points. The returned cases retain the same structure
+    as the plotting diagnostics while recording the refit predictions.
+    """
+    x_obs = np.asarray(x_obs, dtype=float)
+    y_obs = np.asarray(y_obs, dtype=float).ravel()
+    x_display = np.asarray(x_display, dtype=float)
+    y_display = np.asarray(y_display, dtype=float).ravel()
+    if x_display.ndim == 1:
+        x_display = x_display[:, None]
+    if len(x_obs) != len(y_obs) or len(x_display) != len(y_display):
+        raise ValueError("Holdout arrays must have matching lengths")
+    if len(x_obs) != len(x_display):
+        raise ValueError("x_obs and x_display must describe the same observations")
+
+    endpoint_mask = np.any(
+        np.isclose(x_display, np.min(x_display, axis=0))
+        | np.isclose(x_display, np.max(x_display, axis=0)),
+        axis=1,
+    )
+    eligible = np.flatnonzero(~endpoint_mask)
+    if not len(eligible):
+        raise ValueError("No interior application-domain points are available")
+
+    scale = np.ptp(y_display)
+    scale = scale if scale > 0 else 1.0
+    rng = np.random.default_rng(random_state)
+    cases = []
+    results = {}
+
+    for fraction in holdout_fractions:
+        fraction = float(fraction)
+        n_holdout = max(1, int(round(fraction * len(y_obs))))
+        if n_holdout > len(eligible):
+            raise ValueError("Requested holdout exceeds available interior points")
+        scores = []
+        for _ in range(n_repeats):
+            holdout = rng.choice(eligible, size=n_holdout, replace=False)
+            retained = np.setdiff1d(np.arange(len(y_obs)), holdout)
+            chain, ell, var = run_delta_sampler(
+                x_obs[retained], y_obs[retained], theta, gp_eta, dtheta,
+                n_mcmc, burn_in, mh_scale_delta, allow_singular_covariance
+            )
+            start = min(max(burn_in, 0), n_mcmc - 1)
+            posterior = chain[start:]
+            predictions = []
+            corrections = []
+            weights_by_parameter = []
+            for k in range(dtheta):
+                K = rbf_kernel(
+                    x_obs[retained], x_obs[retained],
+                    ell=ell[k], var=var[k]
+                ) + 1e-8 * np.eye(len(retained))
+                K_cross = rbf_kernel(
+                    x_obs[holdout], x_obs[retained],
+                    ell=ell[k], var=var[k]
+                )
+                weights_by_parameter.append(np.linalg.solve(K, K_cross.T))
+            for index, point in enumerate(x_obs[holdout]):
+                sample_predictions = []
+                sample_corrections = []
+                for delta_sample in posterior[::max(1, len(posterior) // 200)]:
+                    correction = np.array([
+                        delta_sample[k] @ weights_by_parameter[k][:, index]
+                        for k in range(dtheta)
+                    ])
+                    mean, _ = eta_predict(
+                        point, theta + correction, gp_eta
+                    )
+                    sample_predictions.append(mean)
+                    sample_corrections.append(correction)
+                predictions.append(float(np.mean(sample_predictions)))
+                corrections.append(np.mean(sample_corrections, axis=0).tolist())
+
+            predictions = np.asarray(predictions)
+            score = np.sqrt(np.mean(
+                (y_display[holdout] - predictions) ** 2
+            )) / scale
+            scores.append(float(score))
+            cases.append({
+                "fraction": fraction,
+                "indices": holdout.tolist(),
+                "x": x_display[holdout].tolist(),
+                "y_true": y_display[holdout].tolist(),
+                "y_pred": predictions.tolist(),
+                "parameter_corrections": corrections,
+                "refit": True,
+            })
+        mean_score = float(np.mean(scores))
+        results[str(fraction)] = {
+            "holdout_count": n_holdout,
+            "nrmse": mean_score,
+            "nrmse_std": float(np.std(scores)),
+            "sensitivity": None,
+        }
+
+    return {
+        "full_nrmse": None,
+        "holdout_results": results,
+        "n_repeats": int(n_repeats),
+        "scale": float(scale),
+        "protected_indices": np.flatnonzero(endpoint_mask).tolist(),
+        "eligible_indices": eligible.tolist(),
+        "cases": cases,
+        "refit": True,
+    }
+
 def rbf_kernel(X, Y, ell=1.0, var=1.0):
     X = np.atleast_2d(X)
     Y = np.atleast_2d(Y)

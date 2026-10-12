@@ -140,6 +140,11 @@ Controls MCMC behavior:
   `figures/holdout_nrmse_sensitivity.png`, which aggregates every holdout trial
   at each withheld fraction and plots mean NRMSE with +/- 1 SD, alongside the
   full-dataset NRMSE baseline.
+- When `figure_options.holdout_sensitivity` is `true`, each holdout trial is
+  refit using only retained observations and scored only on withheld interior
+  observations. `validation_options.holdout_n_mcmc` and
+  `holdout_burn_in` control the additional trial sampler cost. When it is
+  `false`, calibration is performed once and no holdout refits are run.
 
 ### `label_settings`
 

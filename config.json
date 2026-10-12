@@ -72,6 +72,8 @@
         "validation_options": {
             "holdout_fractions": [0.1, 0.2, 0.3],
             "holdout_repeats": 20,
+            "holdout_n_mcmc": 2000,
+            "holdout_burn_in": 500,
             "random_seed": 0,
             "holdout_predictions_filename": "holdout_predictions.png",
             "holdout_nrmse_filename": "holdout_nrmse_sensitivity.png",
