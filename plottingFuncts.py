@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 from scipy.stats import gaussian_kde
+from sklearn.decomposition import PCA
 
 
 def _density(values, x_grid):
@@ -23,7 +24,7 @@ def plot_prior_posterior_densities(
     figures_directory,
     filename="prior_posterior_densities.png",
 ):
-    """Plot empirical prior and posterior densities for each calibration parameter."""
+    """Plot prior theta and posterior theta* = theta^0 + kappa densities."""
     prior_samples = np.asarray(prior_samples, dtype=float)
     posterior_samples = np.asarray(posterior_samples, dtype=float)
     if prior_samples.ndim != 2 or posterior_samples.ndim != 2:
@@ -45,21 +46,263 @@ def plot_prior_posterior_densities(
         combined = np.concatenate((prior, posterior))
         x_grid = np.linspace(np.min(combined), np.max(combined), 300)
         if np.ptp(combined) > 0:
-            ax.plot(x_grid, _density(prior, x_grid), label="Prior")
-            ax.plot(x_grid, _density(posterior, x_grid), label="Posterior")
+            ax.plot(
+                x_grid,
+                _density(prior, x_grid),
+                label=r"Prior $\theta$",
+            )
+            ax.plot(
+                x_grid,
+                _density(posterior, x_grid),
+                label=r"Posterior $\theta^*=\theta^0+\kappa$",
+            )
         else:
-            ax.axvline(combined[0], label="Prior and posterior")
+            ax.axvline(
+                combined[0],
+                label=r"Prior $\theta$ and posterior $\theta^*=\theta^0+\kappa$",
+            )
         ax.set_ylabel("Density")
         ax.set_title(str(label))
         ax.grid(True, alpha=0.3)
         ax.legend()
-    axes[-1].set_xlabel("Calibration parameter value")
+    axes[-1].set_xlabel(r"Calibration parameter value: $\theta$ or $\theta^*$")
     fig.tight_layout()
     os.makedirs(figures_directory, exist_ok=True)
     path = os.path.join(figures_directory, filename)
     fig.savefig(path, dpi=150)
     plt.close(fig)
     print(f"Saved prior-posterior density figure to {path}")
+    return path
+
+
+def _compute_emulator_sensitivities(
+    emulator,
+    emulator_inputs,
+    theta_indices,
+    finite_difference_step=1e-4,
+):
+    """Return local emulator derivatives with respect to each theta."""
+    emulator_inputs = np.asarray(emulator_inputs, dtype=float)
+    theta_indices = np.asarray(theta_indices, dtype=int)
+    if emulator_inputs.ndim != 2:
+        raise ValueError("emulator_inputs must be a two-dimensional array")
+    if theta_indices.ndim != 1 or theta_indices.size == 0:
+        raise ValueError("theta_indices must contain at least one index")
+    if np.any(theta_indices < 0) or np.any(theta_indices >= emulator_inputs.shape[1]):
+        raise ValueError("theta_indices must refer to emulator input columns")
+    if finite_difference_step <= 0:
+        raise ValueError("finite_difference_step must be positive")
+
+    sensitivity = np.empty((len(emulator_inputs), len(theta_indices)))
+    for column, theta_index in enumerate(theta_indices):
+        plus = emulator_inputs.copy()
+        minus = emulator_inputs.copy()
+        plus[:, theta_index] += finite_difference_step
+        minus[:, theta_index] -= finite_difference_step
+        plus_prediction = np.asarray(emulator.predict(plus)).reshape(-1)
+        minus_prediction = np.asarray(emulator.predict(minus)).reshape(-1)
+        sensitivity[:, column] = (
+            plus_prediction - minus_prediction
+        ) / (2 * finite_difference_step)
+    return sensitivity
+
+
+def plot_emulator_sensitivity_pca(
+    emulator,
+    emulator_inputs,
+    theta_indices,
+    theta_labels,
+    figures_directory,
+    filename="emulator_sensitivity_pca.png",
+    finite_difference_step=1e-4,
+):
+    """Plot a PCA biplot of local emulator sensitivities to each theta.
+
+    Sensitivities are finite-difference derivatives of the emulator response
+    with respect to each normalized theta input. Each point is one emulator
+    evaluation, while arrows show the contribution of each theta to the first
+    two principal components.
+    """
+    theta_indices = np.asarray(theta_indices, dtype=int)
+    if len(theta_labels) != theta_indices.size:
+        raise ValueError("theta_labels must match theta_indices")
+    sensitivity = _compute_emulator_sensitivities(
+        emulator,
+        emulator_inputs,
+        theta_indices,
+        finite_difference_step=finite_difference_step,
+    )
+
+    sensitivity_mean = sensitivity.mean(axis=0)
+    sensitivity_scale = sensitivity.std(axis=0)
+    sensitivity_scale[sensitivity_scale == 0] = 1.0
+    standardized = (sensitivity - sensitivity_mean) / sensitivity_scale
+
+    n_components = min(2, standardized.shape[0], standardized.shape[1])
+    if np.allclose(standardized, 0):
+        scores = np.zeros((len(standardized), 2))
+        components = np.zeros((2, standardized.shape[1]))
+        explained_variance = np.zeros(2)
+    else:
+        pca = PCA(n_components=n_components)
+        scores = pca.fit_transform(standardized)
+        if n_components == 1:
+            scores = np.column_stack((scores[:, 0], np.zeros(len(scores))))
+            components = np.vstack(
+                (pca.components_[0], np.zeros(pca.n_features_in_))
+            )
+            explained_variance = np.array(
+                [pca.explained_variance_ratio_[0], 0.0]
+            )
+        else:
+            components = pca.components_[:2]
+            explained_variance = pca.explained_variance_ratio_[:2]
+
+    fig, ax = plt.subplots(figsize=(7.2, 6.2))
+    color_values = emulator_inputs[:, 0]
+    scatter = ax.scatter(
+        scores[:, 0],
+        scores[:, 1],
+        c=color_values,
+        cmap="viridis",
+        s=28,
+        alpha=0.78,
+        edgecolors="white",
+        linewidths=0.35,
+        rasterized=len(scores) > 500,
+    )
+
+    arrow_scale = max(np.max(np.abs(scores)), 1.0) * 0.72
+    for index, label in enumerate(theta_labels):
+        vector = components[:, index]
+        display_label = str(label)
+        if display_label.startswith("\\") and not display_label.startswith("$"):
+            display_label = f"${display_label}$"
+        ax.arrow(
+            0,
+            0,
+            vector[0] * arrow_scale,
+            vector[1] * arrow_scale,
+            color=f"C{index % 10}",
+            width=0.006 * arrow_scale,
+            head_width=0.045 * arrow_scale,
+            length_includes_head=True,
+            alpha=0.9,
+        )
+        ax.text(
+            vector[0] * arrow_scale * 1.08,
+            vector[1] * arrow_scale * 1.08,
+            display_label,
+            color=f"C{index % 10}",
+            fontsize=11,
+            ha="center",
+            va="center",
+        )
+
+    ax.axhline(0, color="0.75", linewidth=0.8)
+    ax.axvline(0, color="0.75", linewidth=0.8)
+    ax.set_xlabel(f"PC1 ({explained_variance[0]:.1%} variance)")
+    ax.set_ylabel(f"PC2 ({explained_variance[1]:.1%} variance)")
+    ax.set_title("Emulator sensitivity to calibration parameters")
+    ax.grid(True, alpha=0.22)
+    colorbar = fig.colorbar(scatter, ax=ax, pad=0.02)
+    colorbar.set_label("Normalized application-domain input")
+    fig.tight_layout()
+
+    os.makedirs(figures_directory, exist_ok=True)
+    path = os.path.join(figures_directory, filename)
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved emulator sensitivity PCA figure to {path}")
+    return path
+
+
+def plot_emulator_sensitivity_boxplot(
+    emulator,
+    emulator_inputs,
+    theta_indices,
+    theta_labels,
+    figures_directory,
+    filename="emulator_sensitivity_boxplot.png",
+    finite_difference_step=1e-4,
+):
+    """Plot a ranked boxplot of absolute local emulator sensitivities."""
+    theta_indices = np.asarray(theta_indices, dtype=int)
+    if len(theta_labels) != theta_indices.size:
+        raise ValueError("theta_labels must match theta_indices")
+
+    sensitivity = _compute_emulator_sensitivities(
+        emulator,
+        emulator_inputs,
+        theta_indices,
+        finite_difference_step=finite_difference_step,
+    )
+    absolute_sensitivity = np.abs(sensitivity)
+    order = np.argsort(np.median(absolute_sensitivity, axis=0))[::-1]
+    ranked_values = absolute_sensitivity[:, order]
+    ranked_labels = [theta_labels[index] for index in order]
+
+    fig_height = max(4.4, 0.72 * len(ranked_labels) + 1.8)
+    fig, ax = plt.subplots(figsize=(8.2, fig_height))
+    positions = np.arange(1, len(ranked_labels) + 1)
+    box = ax.boxplot(
+        [ranked_values[:, index] for index in range(len(ranked_labels))],
+        vert=False,
+        positions=positions,
+        patch_artist=True,
+        widths=0.58,
+        showfliers=True,
+        flierprops={
+            "marker": "o",
+            "markersize": 3.5,
+            "markerfacecolor": "0.35",
+            "markeredgecolor": "0.35",
+            "alpha": 0.45,
+        },
+        medianprops={"color": "black", "linewidth": 1.6},
+        whiskerprops={"color": "0.35", "linewidth": 1.1},
+        capprops={"color": "0.35", "linewidth": 1.1},
+    )
+    for patch, index in zip(box["boxes"], range(len(ranked_labels))):
+        patch.set_facecolor(plt.get_cmap("viridis")(
+            index / max(len(ranked_labels) - 1, 1)
+        ))
+        patch.set_alpha(0.78)
+        patch.set_edgecolor("0.25")
+        patch.set_linewidth(0.8)
+
+    means = ranked_values.mean(axis=0)
+    display_labels = [
+        f"${label}$"
+        if str(label).startswith("\\") and not str(label).startswith("$")
+        else str(label)
+        for label in ranked_labels
+    ]
+    ax.scatter(
+        means,
+        positions,
+        marker="D",
+        s=32,
+        color="white",
+        edgecolor="black",
+        linewidth=0.8,
+        zorder=3,
+        label="Mean",
+    )
+    ax.set_yticks(positions)
+    ax.set_yticklabels(display_labels)
+    ax.invert_yaxis()
+    ax.set_xlabel(r"Absolute local sensitivity $|\partial \eta / \partial \theta|$")
+    ax.set_title("Ranked emulator sensitivity to calibration parameters")
+    ax.grid(True, axis="x", alpha=0.25)
+    ax.legend(loc="lower right", frameon=True)
+    fig.tight_layout()
+
+    os.makedirs(figures_directory, exist_ok=True)
+    path = os.path.join(figures_directory, filename)
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved emulator sensitivity boxplot to {path}")
     return path
 
 
@@ -320,25 +563,25 @@ def plot_external_validation(
         s=55,
         label=f"{simulation_set_label} runs",
     )
-    prediction_ax.scatter(
-        x_external,
-        y_external_pred,
-        color="tab:green",
-        marker="D",
-        s=48,
-        edgecolors="black",
-        label="Emulator at corrected parameters",
-    )
-    for x_value, observed, predicted in zip(
-        x_external, y_external, y_external_pred
-    ):
-        prediction_ax.plot(
-            [x_value, x_value],
-            [observed, predicted],
-            color="tab:green",
-            alpha=0.35,
-            linewidth=1,
-        )
+    # prediction_ax.scatter(
+    #     x_external,
+    #     y_external_pred,
+    #     color="tab:green",
+    #     marker="D",
+    #     s=48,
+    #     edgecolors="black",
+    #     label="Emulator at corrected parameters",
+    # )
+    # for x_value, observed, predicted in zip(
+    #     x_external, y_external, y_external_pred
+    # ):
+    #     prediction_ax.plot(
+    #         [x_value, x_value],
+    #         [observed, predicted],
+    #         color="tab:green",
+    #         alpha=0.35,
+    #         linewidth=1,
+    #     )
     prediction_ax.set_xlabel("Application domain")
     prediction_ax.set_ylabel("Critical stress")
     prediction_ax.set_title("External validation against calibration posterior")

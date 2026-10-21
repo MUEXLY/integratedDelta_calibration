@@ -562,5 +562,19 @@ def build_known_theta_field(
 
             elif f == "cos":
                 return np.cos(x)
+            
+    elif known_theta_form == "custom":
+
+        funcs = form_config.get("functions", [])
+
+        if theta_idx < len(funcs):
+
+            f = funcs[theta_idx]
+
+            if f=="cust_1":
+                return 0.15 * np.sin(2.0 * np.pi * x / 10.0) + 1
+            
+            if f=="cust_2":
+                return 0.10 * np.cos(np.pi * x / 10.0) + 1
 
     return np.zeros_like(x)

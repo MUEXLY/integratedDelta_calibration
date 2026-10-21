@@ -1,6 +1,6 @@
 {
     "calibration_settings":{
-        "N_mcmc": 10000,
+        "N_mcmc": 20000,
         "burn_in": 1000,
         "mh_scale_delta_prior": 0.15,
         "theta_initialization":"fixed",
@@ -8,7 +8,7 @@
         "allow_singular_covariance": true
     },
     "input_settings":{
-        "input_delimiter": " ",
+        "input_delimiter": "\t",
         "input_header": true,
         "input_observations_path": "./md-ddd_edgeDipole/observationData/",
         "input_model_path": "./md-ddd_edgeDipole/modelData/"
@@ -16,33 +16,38 @@
     "label_settings":{
         "custom_labels": true,
         "theta_labels":{
-                "theta1": "\theta_1",
-                "theta2": "\theta_2"
+                "theta1": "\\ell^{c}",
+                "theta2": "\\mu",
+                "theta3": "\\nu"
 
         },
         "kappa_labels":{
-                "kappa1": "kappa_1",
-                "kappa2": "kappa_2"
+                "kappa1": "\\kappa_1",
+                "kappa2": "\\kappa_2",
+                "kappa3": "\\kappa_3"
         },
         "observation_labels":{
-                "obs1": "y"
+                "obs1": "CRSS [MPa]"
         },
-        "observation_set_label": "Observation",
-        "simulation_set_label": "Simulation",
+        "observation_set_label": "MD Observations",
+        "simulation_set_label": "DDD Simulations",
         "application_domain_labels":{
                 "domain1": "x"
         }
 
     },
     "cross_validation_settings":{
-        "conduct_cross_validation": true,
-        "known_theta_form": "constant",
+        "conduct_cross_validation": false,
+        "known_theta_form": "custom",
         "known_theta_form_params": {
             "constant": {
                 "values": [1.5,1.75]
             },
             "trig_funct": {
                 "functions": ["sin", "cos"]
+            },
+            "custom":{
+                "functions": ["cust_1", "cust_2"]
             }
         }
     },
@@ -57,9 +62,13 @@
             "delta_posterior_normalized": true,
             "delta_posterior_physical": true,
             "prior_posterior_density": true,
-            "holdout_sensitivity": true,
-            "holdout_predictions": true,
-            "holdout_nrmse_sensitivity": true,
+            "emulator_sensitivity_pca": true,
+            "emulator_sensitivity_pca_filename": "emulator_sensitivity_pca.png",
+            "emulator_sensitivity_boxplot": true,
+            "emulator_sensitivity_boxplot_filename": "emulator_sensitivity_boxplot.png",
+            "holdout_sensitivity": false,
+            "holdout_predictions": false,
+            "holdout_nrmse_sensitivity": false,
             "acceptance_trajectory": true,
             "step_size_plot": true
         },
@@ -79,7 +88,7 @@
             "holdout_nrmse_filename": "holdout_nrmse_sensitivity.png",
             "external_validation": {
                 "enabled": true,
-                "csv_path": "/home/liammyhill/Desktop/box/calibrationResults/crss_Calibration/edge/integratedDeltaValidation/outputs/crss_pa_results.csv",
+                "csv_path": "/Users/liammyhill/Library/CloudStorage/Box-Box/calibrationResults/crss_Calibration/edge/integratedDeltaValidation/outputs/crss_pa_results.csv",
                 "x_column": "measuredSeparation(b)",
                 "y_column": "crss_pa",
                 "y_scale": 1.0e-6,

@@ -126,7 +126,20 @@ Controls MCMC behavior:
 
 - Controls which plots and diagnostics are generated  
 - `figure_options.prior_posterior_density` adds a prior/posterior density comparison
-  for each calibration parameter.
+  for each calibration parameter. The legend distinguishes the prior
+  `theta` from the posterior `theta* = theta^0 + kappa`.
+- `delta_posterior_physical` plots physical kappa relative to the fixed
+  `theta^0` baseline. Its shaded prior band is transformed to
+  `theta - theta^0`, so the range is centered in the same zero-based
+  coordinate system as kappa.
+- `figure_options.emulator_sensitivity_pca` adds
+  `figures/emulator_sensitivity_pca.png`, a PCA biplot of local emulator
+  sensitivities to each calibration parameter. Theta labels are read in order
+  from `label_settings.theta_labels`.
+- `figure_options.emulator_sensitivity_boxplot` adds
+  `figures/emulator_sensitivity_boxplot.png`, a ranked box-and-whisker plot of
+  absolute local sensitivities. Parameters are ordered by median influence;
+  white diamonds mark the mean sensitivity.
 - `figure_options.holdout_sensitivity` evaluates normalized RMSE on repeated random
   holdout subsets. Results are written to
   `results/holdout_sensitivity_metrics.json`; fractions and repetitions are
@@ -152,6 +165,10 @@ Controls MCMC behavior:
   in generated figures.
 - `simulation_set_label` controls the label used for simulator data and
   predictive-fit titles.
+- LaTeX labels must use JSON-escaped backslashes, for example:
+  `"theta1": "\\ell^{c}"` and `"kappa1": "\\kappa_1"`. Labels beginning
+  with `\` are rendered as Matplotlib mathtext in parameter and discrepancy
+  figure annotations.
 
 ### External validation
 

@@ -11,6 +11,16 @@ from plottingFuncts import *
 from functs import *
 
 
+def _math_label(label):
+    """Format a configured LaTeX command for Matplotlib mathtext."""
+    label = str(label)
+    if label.startswith("$") and label.endswith("$"):
+        return label
+    if label.startswith("\\"):
+        return f"${label}$"
+    return label
+
+
 def main():
 
     # Read in data for processing
@@ -95,8 +105,41 @@ def main():
     model_domain = model_data[[col for col in model_data.columns if col.startswith('x_')]]
     calib_params = model_data[[col for col in model_data.columns if col.startswith('theta_')]]
 
-    theta_labels = [col.replace('theta_', '') for col in calib_params.columns]
+    configured_theta_labels = label_settings.get("theta_labels", {})
+    theta_labels = []
+    for index, column in enumerate(calib_params.columns):
+        parameter_name = column.replace("theta_", "")
+        configured_label = next(
+            (
+                configured_theta_labels[key]
+                for key in (
+                    column,
+                    parameter_name,
+                    f"theta{index + 1}",
+                    f"theta_{index + 1}",
+                )
+                if key in configured_theta_labels
+            ),
+            parameter_name,
+        )
+        theta_labels.append(configured_label)
     app_labels = [col.replace('x_', '') for col in model_domain.columns]
+    configured_kappa_labels = label_settings.get("kappa_labels", {})
+    kappa_labels = [
+        next(
+            (
+                configured_kappa_labels[key]
+                for key in (
+                    f"kappa{index + 1}",
+                    f"kappa_{index + 1}",
+                    f"delta{index + 1}",
+                )
+                if key in configured_kappa_labels
+            ),
+            f"\\kappa_{{{index + 1}}}",
+        )
+        for index in range(len(calib_params.columns))
+    ]
 
     # create standardized/normalized dataframes
     model_normalized = model_data.copy()
@@ -202,6 +245,32 @@ def main():
 
     print("\nTrained emulator kernel:")
     print(gp_eta.kernel_)
+
+    if figure_options.get("emulator_sensitivity_pca", False):
+        plot_emulator_sensitivity_pca(
+            gp_eta,
+            Z_sim,
+            theta_indices=np.arange(x_sim.shape[1], Z_sim.shape[1]),
+            theta_labels=theta_labels,
+            figures_directory=figures_directory,
+            filename=figure_options.get(
+                "emulator_sensitivity_pca_filename",
+                "emulator_sensitivity_pca.png",
+            ),
+        )
+
+    if figure_options.get("emulator_sensitivity_boxplot", False):
+        plot_emulator_sensitivity_boxplot(
+            gp_eta,
+            Z_sim,
+            theta_indices=np.arange(x_sim.shape[1], Z_sim.shape[1]),
+            theta_labels=theta_labels,
+            figures_directory=figures_directory,
+            filename=figure_options.get(
+                "emulator_sensitivity_boxplot_filename",
+                "emulator_sensitivity_boxplot.png",
+            ),
+        )
 
     # ============================================================
     # 3. Initialize θ (fixed plug-in estimate)
@@ -932,8 +1001,11 @@ def main():
             ax.axhline(0, color="black", linestyle="--", linewidth=1)
 
             name = param_names[k] if k < len(param_names) else f"theta{k}"
-            ax.set_title(f"Discrepancy Field \kappa(x) for parameter: {name}")
-            ax.set_ylabel("\kappa(x)")
+            ax.set_title(
+                f"Discrepancy Field {_math_label(kappa_labels[k])} "
+                f"for parameter: {_math_label(name)}"
+            )
+            ax.set_ylabel(_math_label(kappa_labels[k]))
             ax.legend()
             ax.grid(True)
 
@@ -970,20 +1042,55 @@ def main():
             mean_k = delta_mean_phys[k, x_sorted_idx]
             std_k = delta_std_phys[k, x_sorted_idx]
 
-            theta_pred = theta_post_mean_phys[k, x_sorted_idx]
+            # Plot kappa itself as a deviation from the fixed theta^0 = 0
+            # reference, rather than the absolute calibrated theta field.
             ax.plot(
                 x_sorted_phys,
-                theta_pred,
-                label=rf"$\theta_{{{k+1}}}(x)$ posterior mean",
+                mean_k,
+                label=f"{_math_label(kappa_labels[k])} posterior mean",
                 linewidth=2
             )
 
             ax.fill_between(
                 x_sorted_phys,
-                theta_pred - 2 * std_k,
-                theta_pred + 2 * std_k,
+                mean_k - 2 * std_k,
+                mean_k + 2 * std_k,
                 alpha=0.3,
                 label="±2 std"
+            )
+            prior_offset_min = theta_min[k] - theta_fixed_phys[k]
+            prior_offset_max = theta_max[k] - theta_fixed_phys[k]
+            ax.axhspan(
+                prior_offset_min,
+                prior_offset_max,
+                color="tab:orange",
+                alpha=0.12,
+                label=r"Theta prior range normalized about $\theta^0$",
+            )
+            ax.axhline(
+                0,
+                color="black",
+                linestyle="--",
+                linewidth=1,
+                label=(
+                    r"$\kappa=0$ baseline "
+                    rf"($\theta^0_{{\rm phys}}={theta_fixed_phys[k]:.4g}$)"
+                ),
+            )
+            ax.text(
+                0.98,
+                0.96,
+                rf"$\theta^0_{{\rm phys}}={theta_fixed_phys[k]:.4g}$",
+                transform=ax.transAxes,
+                ha="right",
+                va="top",
+                fontsize=10,
+                bbox={
+                    "boxstyle": "round,pad=0.25",
+                    "facecolor": "white",
+                    "edgecolor": "0.7",
+                    "alpha": 0.85,
+                },
             )
 
             # ============================================================
@@ -1011,21 +1118,14 @@ def main():
                     form_config,
                     x_sorted_phys,
                     k
-                )
+                ) - theta_fixed_phys[k]
 
                 ax.plot(
                     x_sorted_phys,
                     theta_true,
                     linestyle="--",
                     linewidth=2,
-                    label=rf"$\theta_{{{k+1}}}^{{true}}(x)$"
-                )
-
-                ax.plot(
-                    x_sorted_phys,
-                    theta_pred,
-                    linewidth=2,
-                    label=rf"$\theta_{{{k+1}}}^{{pred}}(x)$"
+                    label=rf"$\theta_{{{k+1}}}^{{true}}(x)-\theta^0_{{\rm phys}}$"
                 )
 
             # for j in range(5):
@@ -1034,8 +1134,13 @@ def main():
             #     ax.plot(x_sorted_phys, sample_k, alpha=0.3)
 
             name = param_names[k] if k < len(param_names) else f"theta{k}"
-            ax.set_title(f"Calibrated Parameter Field for: {name}")
-            ax.set_ylabel(r"$\theta(x)$ in physical units")
+            ax.set_title(
+                f"Physical discrepancy field for: {_math_label(name)}"
+            )
+            ax.set_ylabel(
+                f"{_math_label(kappa_labels[k])} "
+                r"(relative to $\theta^0$)"
+            )
             ax.legend()
             ax.grid(True)
 
