@@ -9,6 +9,17 @@ from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 
 from plottingFuncts import *
 from functs import *
+from functs import _prior_for_kappa
+
+
+def _math_label(label):
+    """Format a configured LaTeX command for Matplotlib mathtext."""
+    label = str(label)
+    if label.startswith("$") and label.endswith("$"):
+        return label
+    if label.startswith("\\"):
+        return f"${label}$"
+    return label
 
 
 def main():
@@ -22,8 +33,15 @@ def main():
     output_settings = config['output_settings']
     cross_validation_settings = config['cross_validation_settings']
     label_settings = config['label_settings']
+    observation_set_label = label_settings.get(
+        "observation_set_label", "Observation"
+    )
+    simulation_set_label = label_settings.get(
+        "simulation_set_label", "Simulation"
+    )
     results_options = output_settings['results_options']
     results_directory = results_options['results_path']
+    validation_options = output_settings.get('validation_options', {})
 
     observation_path = input_settings['input_observations_path']
     model_path = input_settings['input_model_path']
@@ -88,8 +106,80 @@ def main():
     model_domain = model_data[[col for col in model_data.columns if col.startswith('x_')]]
     calib_params = model_data[[col for col in model_data.columns if col.startswith('theta_')]]
 
-    theta_labels = [col.replace('theta_', '') for col in calib_params.columns]
-    app_labels = [col.replace('x_', '') for col in model_domain.columns]
+    configured_theta_labels = label_settings.get("theta_labels", {})
+    theta_labels = []
+    for index, column in enumerate(calib_params.columns):
+        parameter_name = column.replace("theta_", "")
+        configured_label = next(
+            (
+                configured_theta_labels[key]
+                for key in (
+                    column,
+                    parameter_name,
+                    f"theta{index + 1}",
+                    f"theta_{index + 1}",
+                )
+                if key in configured_theta_labels
+            ),
+            parameter_name,
+        )
+        theta_labels.append(configured_label)
+    configured_app_labels = label_settings.get("application_domain_labels", {})
+    app_labels = []
+    for index, column in enumerate(model_domain.columns):
+        domain_name = column.replace("x_", "")
+        app_labels.append(
+            next(
+                (
+                    configured_app_labels[key]
+                    for key in (
+                        column,
+                        domain_name,
+                        f"domain{index + 1}",
+                        f"domain_{index + 1}",
+                    )
+                    if key in configured_app_labels
+                ),
+                domain_name,
+            )
+        )
+    configured_observation_labels = label_settings.get("observation_labels", {})
+    observation_labels = []
+    for index, column in enumerate(
+        column for column in obs_data.columns if column.startswith("xi_")
+    ):
+        observation_name = column.replace("xi_", "")
+        observation_labels.append(
+            next(
+                (
+                    configured_observation_labels[key]
+                    for key in (
+                        column,
+                        observation_name,
+                        f"obs{index + 1}",
+                        f"obs_{index + 1}",
+                    )
+                    if key in configured_observation_labels
+                ),
+                observation_name,
+            )
+        )
+    configured_kappa_labels = label_settings.get("kappa_labels", {})
+    kappa_labels = [
+        next(
+            (
+                configured_kappa_labels[key]
+                for key in (
+                    f"kappa{index + 1}",
+                    f"kappa_{index + 1}",
+                    f"delta{index + 1}",
+                )
+                if key in configured_kappa_labels
+            ),
+            "\\delta_{\\theta}",
+        )
+        for index in range(len(calib_params.columns))
+    ]
 
     # create standardized/normalized dataframes
     model_normalized = model_data.copy()
@@ -131,7 +221,16 @@ def main():
     figure_options = output_settings['figure_options']
     
     if figure_options['data_priors']:
-        generate_rawData_figure(model_data, obs_data, figures_directory)
+        generate_rawData_figure(
+            model_data,
+            obs_data,
+            figures_directory,
+            observation_set_label=observation_set_label,
+            simulation_set_label=simulation_set_label,
+            theta_labels=theta_labels,
+            application_domain_label=app_labels[0],
+            observation_label=observation_labels[0],
+        )
 
     # Simulator inputs
     x_sim = model_normalized[[col for col in model_normalized.columns if col.startswith('x_')]]
@@ -166,6 +265,10 @@ def main():
 
     dtheta = theta_sim.shape[1]
     No = len(x_obs)
+    kappa_hyperpriors = build_kappa_hyperpriors(
+        validation_options.get("kappa_hyperpriors"),
+        dtheta,
+    )
 
     # ============================================================
     # 2. Train probabilistic emulator GP η(x,θ)
@@ -189,6 +292,32 @@ def main():
 
     print("\nTrained emulator kernel:")
     print(gp_eta.kernel_)
+
+    if figure_options.get("emulator_sensitivity_pca", False):
+        plot_emulator_sensitivity_pca(
+            gp_eta,
+            Z_sim,
+            theta_indices=np.arange(x_sim.shape[1], Z_sim.shape[1]),
+            theta_labels=theta_labels,
+            figures_directory=figures_directory,
+            filename=figure_options.get(
+                "emulator_sensitivity_pca_filename",
+                "emulator_sensitivity_pca.png",
+            ),
+        )
+
+    if figure_options.get("emulator_sensitivity_boxplot", False):
+        plot_emulator_sensitivity_boxplot(
+            gp_eta,
+            Z_sim,
+            theta_indices=np.arange(x_sim.shape[1], Z_sim.shape[1]),
+            theta_labels=theta_labels,
+            figures_directory=figures_directory,
+            filename=figure_options.get(
+                "emulator_sensitivity_boxplot_filename",
+                "emulator_sensitivity_boxplot.png",
+            ),
+        )
 
     # ============================================================
     # 3. Initialize θ (fixed plug-in estimate)
@@ -216,9 +345,6 @@ def main():
 
     Nmcmc=calibration_settings["N_mcmc"]
     mh_scale_delta=calibration_settings["mh_scale_delta_prior"]
-
-    prior_ell = {"mu": -1.0, "sigma": 1.0}
-    prior_var = {"mu": -2.0, "sigma": 1.0}
 
     mh_scales = {
         "log_ell_delta": 0.1,
@@ -295,6 +421,7 @@ def main():
 
         # ---- update δ hyperparameters ----
         for k in range(dtheta):
+            prior_ell, prior_var = _prior_for_kappa(kappa_hyperpriors, k)
             ell_delta[k], var_delta[k], _ = mh_update_delta_hyperparams(
                 delta[k],
                 ell_delta[k],
@@ -428,6 +555,228 @@ def main():
     )
 
     theta_post_std_phys = delta_std_phys
+
+    external_validation = validation_options.get("external_validation", {})
+    if external_validation.get("enabled", False):
+        external_data = pd.read_csv(external_validation["csv_path"])
+        parameter_mapping = external_validation["parameter_columns"]
+        missing_columns = [
+            column
+            for column in [
+                external_validation["x_column"],
+                external_validation["y_column"],
+                *parameter_mapping.values(),
+            ]
+            if column not in external_data.columns
+        ]
+        if missing_columns:
+            raise ValueError(
+                f"External validation CSV is missing columns: {missing_columns}"
+            )
+
+        external_x_phys = external_data[external_validation["x_column"]].to_numpy(
+            dtype=float
+        )
+        external_y_phys = (
+            external_data[external_validation["y_column"]].to_numpy(dtype=float)
+            * external_validation.get("y_scale", 1.0)
+        )
+        external_theta_phys = external_data[
+            list(parameter_mapping.values())
+        ].to_numpy(dtype=float)
+        external_theta_normalized = (
+            external_theta_phys - theta_min
+        ) / theta_range
+        external_x_normalized = (
+            external_x_phys - x_sim_min
+        ) / (x_sim_max - x_sim_min)
+        external_correction_phys = np.column_stack(
+            [
+                np.interp(
+                    external_x_phys,
+                    x_obs_phys.ravel(),
+                    delta_mean_phys[k],
+                )
+                for k in range(dtheta)
+            ]
+        )
+        external_correction_normalized = (
+            external_correction_phys / theta_range
+        )
+        external_predictions = []
+        for row in range(len(external_data)):
+            theta_input = external_theta_normalized[row] + (
+                external_correction_normalized[row]
+            )
+            mean, _ = eta_predict(
+                np.atleast_1d(external_x_normalized[row]),
+                theta_input,
+                gp_eta,
+            )
+            external_predictions.append(mean * y_sim_std + y_sim_mean)
+
+        plot_external_validation(
+            x_sim_phys,
+            y_sim_phys,
+            x_obs_phys,
+            y_obs_phys,
+            x_obs_phys,
+            y_post_mean_phys,
+            y_post_std_phys,
+            external_x_phys,
+            external_y_phys,
+            external_predictions,
+            theta_labels,
+            external_theta_phys,
+            external_correction_phys,
+            observation_set_label=observation_set_label,
+            simulation_set_label=simulation_set_label,
+            application_domain_label=app_labels[0],
+            observation_label=observation_labels[0],
+            figures_directory=figures_directory,
+            filename=external_validation.get(
+                "figure_filename", "external_validation.png"
+            ),
+        )
+        external_results_path = os.path.join(
+            results_directory, "external_validation_predictions.csv"
+        )
+        os.makedirs(results_directory, exist_ok=True)
+        external_output = external_data.copy()
+        external_output["posterior_predictive"] = external_predictions
+        for index, label in enumerate(theta_labels):
+            external_output[f"{label}_learned_correction"] = (
+                external_correction_phys[:, index]
+            )
+        external_output.to_csv(external_results_path, index=False)
+        print(f"Saved external validation predictions to {external_results_path}")
+
+    if figure_options.get('prior_posterior_density', False):
+        posterior_start = min(max(burnin, 0), Nmcmc - 1)
+        posterior_theta_samples = (
+            theta_fixed_phys[None, :, None]
+            + delta_chain_phys[posterior_start:]
+        ).transpose(0, 2, 1).reshape(-1, dtheta)
+        plot_prior_posterior_densities(
+            model_data[theta_cols].to_numpy(),
+            posterior_theta_samples,
+            theta_labels,
+            figures_directory,
+        )
+
+    if figure_options.get('holdout_sensitivity', False):
+        holdout_metrics = holdout_sensitivity_refit(
+            x_obs,
+            y_obs,
+            x_obs_phys,
+            y_obs_phys,
+            theta_fixed,
+            gp_eta,
+            dtheta,
+            holdout_fractions=validation_options.get(
+                'holdout_fractions', (0.1, 0.2, 0.3)
+            ),
+            n_repeats=validation_options.get('holdout_repeats', 20),
+            n_mcmc=validation_options.get(
+                'holdout_n_mcmc', max(1000, calibration_settings["N_mcmc"] // 5)
+            ),
+            burn_in=validation_options.get(
+                'holdout_burn_in', max(250, burnin // 2)
+            ),
+            mh_scale_delta=calibration_settings["mh_scale_delta_prior"],
+            allow_singular_covariance=allow_singular_covariance,
+            random_state=validation_options.get('random_seed', 0),
+            kappa_hyperpriors=kappa_hyperpriors,
+        )
+        full_scale = np.ptp(y_obs_phys)
+        full_scale = full_scale if full_scale > 0 else 1.0
+        holdout_metrics["full_nrmse"] = float(
+            np.sqrt(np.mean((y_obs_phys - y_post_mean_phys) ** 2))
+            / full_scale
+        )
+        for result in holdout_metrics["holdout_results"].values():
+            result["sensitivity"] = result["nrmse"] - holdout_metrics["full_nrmse"]
+        if figure_options.get('holdout_predictions', False):
+            plot_holdout_predictions(
+                holdout_metrics['cases'],
+                theta_labels,
+                figures_directory,
+                full_x=x_obs_phys,
+                full_y_true=y_obs_phys,
+                full_y_pred=y_post_mean_phys,
+                full_y_pred_std=y_post_std_phys,
+                full_parameter_corrections=delta_mean_phys.T,
+                filename=validation_options.get(
+                    'holdout_predictions_filename',
+                    'holdout_predictions.png',
+                ),
+            )
+        if figure_options.get('holdout_nrmse_sensitivity', False):
+            plot_holdout_nrmse_sensitivity(
+                holdout_metrics,
+                figures_directory,
+                filename=validation_options.get(
+                    'holdout_nrmse_filename',
+                    'holdout_nrmse_sensitivity.png',
+                ),
+                holdout_cases=holdout_metrics['cases'],
+                full_x=x_obs_phys,
+                full_y_true=y_obs_phys,
+                full_y_pred=y_post_mean_phys,
+                full_y_pred_std=y_post_std_phys,
+            )
+        os.makedirs(results_directory, exist_ok=True)
+        holdout_json_path = os.path.join(
+            results_directory, 'holdout_sensitivity_metrics.json'
+        )
+        with open(holdout_json_path, 'w') as f:
+            json.dump(holdout_metrics, f, indent=4)
+        print(f"Saved holdout sensitivity metrics to {holdout_json_path}")
+
+    if figure_options.get("kappa_hyperprior_sensitivity", False):
+        hyperprior_metrics = kappa_hyperprior_sensitivity(
+            x_obs,
+            y_obs,
+            theta_fixed,
+            gp_eta,
+            dtheta,
+            kappa_hyperpriors,
+            factors=validation_options.get(
+                "kappa_hyperprior_factors", (0.5, 1.0, 2.0)
+            ),
+            n_repeats=validation_options.get(
+                "kappa_hyperprior_repeats", 5
+            ),
+            n_mcmc=validation_options.get(
+                "kappa_hyperprior_n_mcmc",
+                max(1000, calibration_settings["N_mcmc"] // 5),
+            ),
+            burn_in=validation_options.get(
+                "kappa_hyperprior_burn_in",
+                max(250, burnin // 2),
+            ),
+            mh_scale_delta=calibration_settings["mh_scale_delta_prior"],
+            allow_singular_covariance=allow_singular_covariance,
+            random_state=validation_options.get("random_seed", 0),
+        )
+        plot_kappa_hyperprior_sensitivity(
+            hyperprior_metrics,
+            kappa_labels,
+            theta_labels,
+            figures_directory,
+            filename=validation_options.get(
+                "kappa_hyperprior_sensitivity_filename",
+                "kappa_hyperprior_sensitivity.png",
+            ),
+        )
+        os.makedirs(results_directory, exist_ok=True)
+        hyperprior_json_path = os.path.join(
+            results_directory,
+            "kappa_hyperprior_sensitivity_metrics.json",
+        )
+        with open(hyperprior_json_path, "w") as f:
+            json.dump(hyperprior_metrics, f, indent=4)
+        print(f"Saved kappa hyperprior sensitivity metrics to {hyperprior_json_path}")
 
     # ============================================================
     # Cross-validation metrics
@@ -609,15 +958,15 @@ def main():
         # Observations
         plt.scatter(
             x_obs, y_obs,
-            label="Observed data",
+            label=f"{observation_set_label} data",
             marker="o",
             s=60
         )
 
-        # Simulator evaluations
+        # Simulation evaluations
         plt.scatter(
             x_sim, y_sim,
-            label="Simulator runs",
+            label=f"{simulation_set_label} runs",
             marker="x",
             alpha=0.7
         )
@@ -639,7 +988,9 @@ def main():
             label="±2 posterior std"
         )
 
-        plt.title("Posterior Predictive Fit with Simulator Runs")
+        plt.title(
+            f"Posterior Predictive Fit with {simulation_set_label} Runs"
+        )
         plt.xlabel("x (normalized domain)")
         plt.ylabel("y (normalized)")
         plt.legend()
@@ -657,14 +1008,14 @@ def main():
 
         plt.scatter(
             x_obs_phys, y_obs_phys,
-            label="Observed MD data (physical)",
+            label=f"{observation_set_label} data (physical)",
             marker="o",
             s=60
         )
 
         plt.scatter(
             x_sim_phys, y_sim_phys,
-            label="Simulator DDD runs (physical)",
+            label=f"{simulation_set_label} runs (physical)",
             marker="x",
             alpha=0.7
         )
@@ -684,7 +1035,10 @@ def main():
             label="±2 posterior std"
         )
 
-        plt.title("Posterior Predictive Fit with Simulator Runs (Physical Units)")
+        plt.title(
+            f"Posterior Predictive Fit with {simulation_set_label} Runs "
+            "(Physical Units)"
+        )
         plt.xlabel("x (physical domain)")
         plt.ylabel("y (physical)")
         plt.legend()
@@ -745,12 +1099,15 @@ def main():
             ax.axhline(0, color="black", linestyle="--", linewidth=1)
 
             name = param_names[k] if k < len(param_names) else f"theta{k}"
-            ax.set_title(f"Discrepancy Field \kappa(x) for parameter: {name}")
-            ax.set_ylabel("\kappa(x)")
+            ax.set_title(
+                f"Discrepancy Field {_math_label(kappa_labels[k])} "
+                f"for parameter: {_math_label(name)}"
+            )
+            ax.set_ylabel(_math_label(kappa_labels[k]))
             ax.legend()
             ax.grid(True)
 
-        axes[-1].set_xlabel("x")
+        axes[-1].set_xlabel("x (normalized domain)")
 
         plt.tight_layout()
         plt_path = os.path.join(figures_directory, f"delta_posterior_normalized.png")
@@ -783,10 +1140,12 @@ def main():
             mean_k = delta_mean_phys[k, x_sorted_idx]
             std_k = delta_std_phys[k, x_sorted_idx]
 
+            # Plot delta_theta itself as a deviation from the fixed theta^0 = 0
+            # reference, rather than the absolute calibrated theta field.
             ax.plot(
                 x_sorted_phys,
                 mean_k,
-                label=rf"$\kappa_{k+1}(x)$ posterior mean",
+                label=f"{_math_label(kappa_labels[k])} posterior mean",
                 linewidth=2
             )
 
@@ -796,6 +1155,40 @@ def main():
                 mean_k + 2 * std_k,
                 alpha=0.3,
                 label="±2 std"
+            )
+            prior_offset_min = theta_min[k] - theta_fixed_phys[k]
+            prior_offset_max = theta_max[k] - theta_fixed_phys[k]
+            ax.axhspan(
+                prior_offset_min,
+                prior_offset_max,
+                color="tab:orange",
+                alpha=0.12,
+                label=r"Theta prior range normalized about $\theta^0$",
+            )
+            ax.axhline(
+                0,
+                color="black",
+                linestyle="--",
+                linewidth=1,
+                label=(
+                    r"$\delta_\theta=0$ baseline "
+                    rf"($\theta^0_{{\rm phys}}={theta_fixed_phys[k]:.4g}$)"
+                ),
+            )
+            ax.text(
+                0.98,
+                0.96,
+                rf"$\theta^0_{{\rm phys}}={theta_fixed_phys[k]:.4g}$",
+                transform=ax.transAxes,
+                ha="right",
+                va="top",
+                fontsize=10,
+                bbox={
+                    "boxstyle": "round,pad=0.25",
+                    "facecolor": "white",
+                    "edgecolor": "0.7",
+                    "alpha": 0.85,
+                },
             )
 
             # ============================================================
@@ -823,26 +1216,14 @@ def main():
                     form_config,
                     x_sorted_phys,
                     k
-                )
-
-                theta_pred = theta_post_mean_phys[
-                    k,
-                    x_sorted_idx
-                ]
+                ) - theta_fixed_phys[k]
 
                 ax.plot(
                     x_sorted_phys,
                     theta_true,
                     linestyle="--",
                     linewidth=2,
-                    label=rf"$\theta_{{{k+1}}}^{{true}}(x)$"
-                )
-
-                ax.plot(
-                    x_sorted_phys,
-                    theta_pred,
-                    linewidth=2,
-                    label=rf"$\theta_{{{k+1}}}^{{pred}}(x)$"
+                    label=rf"$\theta_{{{k+1}}}^{{true}}(x)-\theta^0_{{\rm phys}}$"
                 )
 
             # for j in range(5):
@@ -850,15 +1231,18 @@ def main():
             #     sample_k = delta_chain_phys[s, k, x_sorted_idx]
             #     ax.plot(x_sorted_phys, sample_k, alpha=0.3)
 
-            ax.axhline(0, color="black", linestyle="--", linewidth=1, label=r"$\theta_0$")
-
             name = param_names[k] if k < len(param_names) else f"theta{k}"
-            ax.set_title(f"Discrepancy Field \kappa(x) for parameter: {name}")
-            ax.set_ylabel("δ(x) in physical units")
+            ax.set_title(
+                f"Physical discrepancy field for: {_math_label(name)}"
+            )
+            ax.set_ylabel(
+                f"{_math_label(kappa_labels[k])} "
+                r"(relative to $\theta^0$)"
+            )
             ax.legend()
             ax.grid(True)
 
-        axes[-1].set_xlabel("x")
+        axes[-1].set_xlabel(_math_label(app_labels[0]))
         plt.tight_layout()
         plt_path = os.path.join(figures_directory, f"delta_posterior_physical.png")
         plt.savefig(plt_path, dpi=150)
