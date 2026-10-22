@@ -6,6 +6,16 @@ from scipy.stats import gaussian_kde
 from sklearn.decomposition import PCA
 
 
+def _math_label(label):
+    """Format a configured LaTeX command for Matplotlib mathtext."""
+    label = str(label)
+    if label.startswith("$") and label.endswith("$"):
+        return label
+    if label.startswith("\\"):
+        return f"${label}$"
+    return label
+
+
 def _density(values, x_grid):
     """Return a KDE where possible, falling back for constant samples."""
     values = np.asarray(values, dtype=float)
@@ -24,7 +34,7 @@ def plot_prior_posterior_densities(
     figures_directory,
     filename="prior_posterior_densities.png",
 ):
-    """Plot prior theta and posterior theta* = theta^0 + kappa densities."""
+    """Plot prior theta and posterior theta* = theta^0 + delta_theta densities."""
     prior_samples = np.asarray(prior_samples, dtype=float)
     posterior_samples = np.asarray(posterior_samples, dtype=float)
     if prior_samples.ndim != 2 or posterior_samples.ndim != 2:
@@ -54,15 +64,15 @@ def plot_prior_posterior_densities(
             ax.plot(
                 x_grid,
                 _density(posterior, x_grid),
-                label=r"Posterior $\theta^*=\theta^0+\kappa$",
+                label=r"Posterior $\theta^*=\theta^0+\delta_\theta$",
             )
         else:
             ax.axvline(
                 combined[0],
-                label=r"Prior $\theta$ and posterior $\theta^*=\theta^0+\kappa$",
+                label=r"Prior $\theta$ and posterior $\theta^*=\theta^0+\delta_\theta$",
             )
         ax.set_ylabel("Density")
-        ax.set_title(str(label))
+        ax.set_title(_math_label(label))
         ax.grid(True, alpha=0.3)
         ax.legend()
     axes[-1].set_xlabel(r"Calibration parameter value: $\theta$ or $\theta^*$")
@@ -417,6 +427,72 @@ def plot_holdout_predictions(
     return path
 
 
+def plot_kappa_hyperprior_sensitivity(
+    sensitivity_metrics,
+    correction_labels,
+    theta_labels,
+    figures_directory,
+    filename="kappa_hyperprior_sensitivity.png",
+):
+    """Plot posterior sensitivity to each delta_theta rho/sigma hyperprior."""
+    scenarios = sensitivity_metrics.get("scenarios", [])
+    if not scenarios:
+        raise ValueError("sensitivity_metrics contains no scenarios")
+
+    groups = []
+    labels = []
+    if len(correction_labels) != len(theta_labels):
+        raise ValueError("correction_labels and theta_labels must have equal length")
+    for kappa_index, (correction_label, theta_label) in enumerate(
+        zip(correction_labels, theta_labels), start=1
+    ):
+        for hyperparameter in ("rho", "sigma"):
+            values = [
+                item["kappa_posterior_rmse"]
+                for item in scenarios
+                if item["kappa"] == kappa_index
+                and item["hyperparameter"] == hyperparameter
+            ]
+            if values:
+                groups.append(values)
+                labels.append(
+                    f"{_math_label(correction_label)}"
+                    f"\n({_math_label(theta_label)})"
+                    f"\n$\{hyperparameter}$"
+                )
+
+    fig, ax = plt.subplots(figsize=(max(8, 1.25 * len(groups)), 5.5))
+    positions = np.arange(1, len(groups) + 1)
+    box = ax.boxplot(
+        groups,
+        positions=positions,
+        patch_artist=True,
+        widths=0.62,
+        medianprops={"color": "black", "linewidth": 1.5},
+        whiskerprops={"color": "0.35"},
+        capprops={"color": "0.35"},
+    )
+    for index, patch in enumerate(box["boxes"]):
+        patch.set_facecolor("tab:blue" if index % 2 == 0 else "tab:orange")
+        patch.set_alpha(0.72)
+    ax.axhline(0, color="0.25", linestyle="--", linewidth=0.8)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel(r"Posterior $\delta_\theta$ RMS change")
+    ax.set_title(
+        r"Sensitivity of posterior $\delta_\theta$ fields to GP hyperpriors"
+    )
+    ax.grid(True, axis="y", alpha=0.25)
+    fig.tight_layout()
+
+    os.makedirs(figures_directory, exist_ok=True)
+    path = os.path.join(figures_directory, filename)
+    fig.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved delta_theta hyperprior sensitivity figure to {path}")
+    return path
+
+
 def plot_holdout_nrmse_sensitivity(
     holdout_metrics,
     figures_directory,
@@ -497,6 +573,8 @@ def plot_external_validation(
     figures_directory,
     observation_set_label="Observation",
     simulation_set_label="Simulation",
+    application_domain_label="Application domain",
+    observation_label="Response",
     filename="external_validation.png",
 ):
     """Plot external validation points against the calibrated prediction."""
@@ -582,8 +660,8 @@ def plot_external_validation(
     #         alpha=0.35,
     #         linewidth=1,
     #     )
-    prediction_ax.set_xlabel("Application domain")
-    prediction_ax.set_ylabel("Critical stress")
+    prediction_ax.set_xlabel(_math_label(application_domain_label))
+    prediction_ax.set_ylabel(_math_label(observation_label))
     prediction_ax.set_title("External validation against calibration posterior")
     prediction_ax.grid(True, alpha=0.3)
     prediction_ax.legend()
@@ -606,7 +684,7 @@ def plot_external_validation(
         parameter_ax.set_xticks([0, 1])
         parameter_ax.set_xticklabels(["External", "Corrected"], rotation=30)
         parameter_ax.set_ylabel("Parameter value")
-        parameter_ax.set_title(str(parameter_name))
+        parameter_ax.set_title(_math_label(parameter_name))
         parameter_ax.grid(True, axis="y", alpha=0.3)
         parameter_ax.legend(fontsize="small")
 
@@ -625,6 +703,9 @@ def generate_rawData_figure(
     figures_directory,
     observation_set_label="Observation",
     simulation_set_label="Simulation",
+    theta_labels=None,
+    application_domain_label=None,
+    observation_label=None,
 ):
     """
     Create subplots for each theta parameter showing:
@@ -649,12 +730,24 @@ def generate_rawData_figure(
     y_col = model_y_columns[0]
     x_col = model_x_columns[0]
     
-    # Create subplot grid for theta parameters
+    if theta_labels is None:
+        theta_labels = [column.replace("theta_", "") for column in theta_columns]
+    if len(theta_labels) != len(theta_columns):
+        raise ValueError("theta_labels must match the theta column count")
+    application_domain_label = application_domain_label or x_col
+    observation_label = observation_label or y_col
+
+    # Use a fixed three-column layout for consistent publication figures.
     n_theta = len(theta_columns)
-    n_cols = int(np.ceil(np.sqrt(n_theta)))
+    n_cols = 3
     n_rows = int(np.ceil(n_theta / n_cols))
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(5.4 * n_cols, 4.2 * n_rows),
+        squeeze=False,
+    )
     axes = np.atleast_1d(axes).flatten()
     
     for idx, theta_col in enumerate(theta_columns):
@@ -677,15 +770,18 @@ def generate_rawData_figure(
                 edgecolors='black',
             )
         
-        ax.set_xlabel(f'{x_col}')
-        ax.set_ylabel(f'{y_col}')
-        ax.set_title(f'{y_col} colored by {theta_col}')
+        ax.set_xlabel(_math_label(application_domain_label))
+        ax.set_ylabel(_math_label(observation_label))
+        ax.set_title(
+            f"{_math_label(observation_label)} colored by "
+            f"{_math_label(theta_labels[idx])}"
+        )
         ax.grid(True, alpha=0.3)
         ax.legend()
         
         # Add colorbar for each subplot
         cbar = plt.colorbar(scatter, ax=ax)
-        cbar.set_label(theta_col)
+        cbar.set_label(_math_label(theta_labels[idx]))
     
     # Hide unused subplots
     for idx in range(n_theta, len(axes)):

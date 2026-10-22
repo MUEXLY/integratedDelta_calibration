@@ -127,11 +127,11 @@ Controls MCMC behavior:
 - Controls which plots and diagnostics are generated  
 - `figure_options.prior_posterior_density` adds a prior/posterior density comparison
   for each calibration parameter. The legend distinguishes the prior
-  `theta` from the posterior `theta* = theta^0 + kappa`.
-- `delta_posterior_physical` plots physical kappa relative to the fixed
+  `theta` from the posterior `theta* = theta^0 + delta_theta`.
+- `delta_posterior_physical` plots physical delta_theta relative to the fixed
   `theta^0` baseline. Its shaded prior band is transformed to
   `theta - theta^0`, so the range is centered in the same zero-based
-  coordinate system as kappa.
+  coordinate system as delta_theta.
 - `figure_options.emulator_sensitivity_pca` adds
   `figures/emulator_sensitivity_pca.png`, a PCA biplot of local emulator
   sensitivities to each calibration parameter. Theta labels are read in order
@@ -144,6 +144,23 @@ Controls MCMC behavior:
   holdout subsets. Results are written to
   `results/holdout_sensitivity_metrics.json`; fractions and repetitions are
   configured under `output_settings.validation_options`.
+- `figure_options.kappa_hyperprior_sensitivity` runs repeated paired
+  calibrations after scaling one delta_theta GP hyperprior median at a time. Configure
+  per-delta_theta log-normal hyperpriors under
+  `validation_options.kappa_hyperpriors`, using `rho` for correlation length
+  and `sigma` for GP amplitude. The fields `log_mu` and `log_sigma` are
+  defined on the natural logarithm of each quantity. For example:
+  `"rho": {"log_mu": -1.0, "log_sigma": 1.0}` and
+  `"sigma": {"log_mu": -1.0, "log_sigma": 1.0}`.
+  The sampler converts the amplitude prior to the corresponding variance
+  prior internally.
+  The validation writes
+  `results/kappa_hyperprior_sensitivity_metrics.json` and
+  `figures/kappa_hyperprior_sensitivity.png`, which ranks posterior delta_theta
+  changes for the rho and sigma perturbations. The validation is disabled by
+  default and uses `kappa_hyperprior_factors`, `kappa_hyperprior_repeats`,
+  `kappa_hyperprior_n_mcmc`, and `kappa_hyperprior_burn_in` for its repeated
+  runs.
 - Holdout selection protects all observations at the minimum or maximum
   application-domain values. `figure_options.holdout_predictions` adds a grid
   figure with one row per holdout trial and one column for the full-domain
@@ -166,9 +183,15 @@ Controls MCMC behavior:
 - `simulation_set_label` controls the label used for simulator data and
   predictive-fit titles.
 - LaTeX labels must use JSON-escaped backslashes, for example:
-  `"theta1": "\\ell^{c}"` and `"kappa1": "\\kappa_1"`. Labels beginning
+  `"theta1": "\\ell^{c}"` and `"kappa1": "\\delta_{\\theta}"`. Labels beginning
   with `\` are rendered as Matplotlib mathtext in parameter and discrepancy
   figure annotations.
+- The external-validation figure uses `application_domain_labels` and
+  `observation_labels` for the left panel axes, and renders configured theta
+  labels in the parameter subplots.
+- `figure_options.data_priors` writes `figures/rawData_theta_parameters.png`
+  using a fixed three-column subplot layout. Its theta titles, colorbars,
+  domain x-axis, and observation y-axis use the configured label settings.
 
 ### External validation
 

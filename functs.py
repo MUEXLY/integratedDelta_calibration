@@ -6,6 +6,59 @@ import json
 import pandas as pd
 
 
+def build_kappa_hyperpriors(configured_priors, dtheta):
+    """Build per-kappa log-normal priors for rho and sigma.
+
+    ``log_mu`` and ``log_sigma`` are the mean and standard deviation of the
+    corresponding log hyperparameter. A scalar or omitted configuration uses
+    the historical sampler defaults.
+    """
+    defaults = [
+        {
+            "rho": {"log_mu": -1.0, "log_sigma": 1.0},
+            "sigma": {"log_mu": -1.0, "log_sigma": 1.0},
+        }
+        for _ in range(dtheta)
+    ]
+    if configured_priors is None:
+        return defaults
+    if isinstance(configured_priors, dict):
+        configured_priors = [
+            configured_priors.get(f"kappa{index + 1}", {})
+            for index in range(dtheta)
+        ]
+    if len(configured_priors) != dtheta:
+        raise ValueError("kappa_hyperpriors must contain one entry per kappa")
+
+    result = []
+    for index, configured in enumerate(configured_priors):
+        prior = defaults[index].copy()
+        for name in ("rho", "sigma"):
+            values = configured.get(name, {})
+            if not isinstance(values, dict):
+                raise ValueError(
+                    f"kappa {index + 1} {name} prior must be an object"
+                )
+            prior[name] = {
+                "log_mu": float(values.get("log_mu", prior[name]["log_mu"])),
+                "log_sigma": float(
+                    values.get("log_sigma", prior[name]["log_sigma"])
+                ),
+            }
+            if prior[name]["log_sigma"] <= 0:
+                raise ValueError(f"kappa {index + 1} {name} log_sigma must be positive")
+        result.append(prior)
+    return result
+
+
+def _prior_for_kappa(kappa_hyperpriors, index):
+    prior = kappa_hyperpriors[index]
+    return (
+        {"mu": prior["rho"]["log_mu"], "sigma": prior["rho"]["log_sigma"]},
+        {"mu": 2.0 * prior["sigma"]["log_mu"], "sigma": prior["sigma"]["log_sigma"]},
+    )
+
+
 def holdout_sensitivity_metric(
     y_true,
     y_pred,
@@ -127,6 +180,8 @@ def run_delta_sampler(
     burn_in,
     mh_scale_delta,
     allow_singular_covariance=False,
+    kappa_hyperpriors=None,
+    random_seed=None,
 ):
     """Run the discrepancy sampler for one calibration training subset."""
     x_obs = np.asarray(x_obs, dtype=float)
@@ -137,8 +192,9 @@ def run_delta_sampler(
     sigma2 = 0.02**2
     delta_chain = np.zeros((n_mcmc, dtheta, len(x_obs)))
 
-    prior_ell = {"mu": -1.0, "sigma": 1.0}
-    prior_var = {"mu": -2.0, "sigma": 1.0}
+    if random_seed is not None:
+        np.random.seed(random_seed)
+    kappa_hyperpriors = build_kappa_hyperpriors(kappa_hyperpriors, dtheta)
     mh_scales = {"log_ell_delta": 0.1, "log_var_delta": 0.1}
     accept_delta = np.zeros(dtheta)
     target_accept = 0.35
@@ -156,6 +212,7 @@ def run_delta_sampler(
             mh_scale_delta *= np.exp(0.05 * (mean_accept - target_accept))
 
         for k in range(dtheta):
+            prior_ell, prior_var = _prior_for_kappa(kappa_hyperpriors, k)
             ell_delta[k], var_delta[k], _ = mh_update_delta_hyperparams(
                 delta[k], ell_delta[k], var_delta[k], x_obs,
                 prior_ell, prior_var, mh_scales,
@@ -167,6 +224,100 @@ def run_delta_sampler(
         delta_chain[iteration] = delta
 
     return delta_chain, ell_delta, var_delta
+
+
+def kappa_hyperprior_sensitivity(
+    x_obs,
+    y_obs,
+    theta,
+    gp_eta,
+    dtheta,
+    kappa_hyperpriors,
+    factors=(0.5, 1.0, 2.0),
+    n_repeats=5,
+    n_mcmc=1000,
+    burn_in=250,
+    mh_scale_delta=0.15,
+    allow_singular_covariance=False,
+    random_state=0,
+):
+    """Quantify posterior sensitivity to each kappa rho/sigma hyperprior.
+
+    One rho or sigma prior median is scaled at a time. Each perturbed run is
+    paired with a nominal run using the same random seed, so reported changes
+    isolate hyperprior sensitivity rather than sampler randomness.
+    """
+    x_obs = np.asarray(x_obs, dtype=float)
+    y_obs = np.asarray(y_obs, dtype=float).ravel()
+    theta = np.asarray(theta, dtype=float)
+    priors = build_kappa_hyperpriors(kappa_hyperpriors, dtheta)
+    factors = tuple(float(factor) for factor in factors)
+    if any(factor <= 0 for factor in factors):
+        raise ValueError("Hyperprior sensitivity factors must be positive")
+
+    y_scale = np.ptp(y_obs)
+    y_scale = y_scale if y_scale > 0 else 1.0
+    scenarios = []
+    for kappa_index in range(dtheta):
+        for hyperparameter in ("rho", "sigma"):
+            for factor in factors:
+                for repeat in range(n_repeats):
+                    seed = int(random_state + repeat)
+                    nominal_chain, _, _ = run_delta_sampler(
+                        x_obs, y_obs, theta, gp_eta, dtheta, n_mcmc,
+                        burn_in, mh_scale_delta, allow_singular_covariance,
+                        kappa_hyperpriors=priors, random_seed=seed,
+                    )
+                    perturbed = [
+                        {
+                            name: values.copy()
+                            for name, values in prior.items()
+                        }
+                        for prior in priors
+                    ]
+                    perturbed[kappa_index][hyperparameter]["log_mu"] += np.log(factor)
+                    perturbed_chain, _, _ = run_delta_sampler(
+                        x_obs, y_obs, theta, gp_eta, dtheta, n_mcmc,
+                        burn_in, mh_scale_delta, allow_singular_covariance,
+                        kappa_hyperpriors=perturbed, random_seed=seed,
+                    )
+                    start = min(max(burn_in, 0), n_mcmc - 1)
+                    nominal_mean = nominal_chain[start:].mean(axis=0)
+                    perturbed_mean = perturbed_chain[start:].mean(axis=0)
+                    kappa_change = np.sqrt(
+                        np.mean((perturbed_mean - nominal_mean) ** 2)
+                    )
+                    theta_change = np.sqrt(
+                        np.mean(
+                            (
+                                (theta[:, None] + perturbed_mean)
+                                - (theta[:, None] + nominal_mean)
+                            ) ** 2
+                        )
+                    )
+                    predictive = []
+                    for point, correction in zip(x_obs, perturbed_mean.T):
+                        mean, _ = eta_predict(point, theta + correction, gp_eta)
+                        predictive.append(mean)
+                    predictive_nrmse = (
+                        np.sqrt(np.mean((y_obs - predictive) ** 2)) / y_scale
+                    )
+                    scenarios.append({
+                        "kappa": kappa_index + 1,
+                        "hyperparameter": hyperparameter,
+                        "factor": factor,
+                        "repeat": repeat + 1,
+                        "kappa_posterior_rmse": float(kappa_change),
+                        "theta_posterior_rmse": float(theta_change),
+                        "predictive_nrmse": float(predictive_nrmse),
+                    })
+    return {
+        "factors": list(factors),
+        "n_repeats": int(n_repeats),
+        "n_mcmc": int(n_mcmc),
+        "burn_in": int(burn_in),
+        "scenarios": scenarios,
+    }
 
 
 def holdout_sensitivity_refit(
@@ -184,6 +335,7 @@ def holdout_sensitivity_refit(
     mh_scale_delta=0.5,
     allow_singular_covariance=False,
     random_state=0,
+    kappa_hyperpriors=None,
 ):
     """Run true refit-based holdout sensitivity analysis.
 
@@ -228,7 +380,9 @@ def holdout_sensitivity_refit(
             retained = np.setdiff1d(np.arange(len(y_obs)), holdout)
             chain, ell, var = run_delta_sampler(
                 x_obs[retained], y_obs[retained], theta, gp_eta, dtheta,
-                n_mcmc, burn_in, mh_scale_delta, allow_singular_covariance
+                n_mcmc, burn_in, mh_scale_delta, allow_singular_covariance,
+                kappa_hyperpriors=kappa_hyperpriors,
+                random_seed=int(random_state + len(cases)),
             )
             start = min(max(burn_in, 0), n_mcmc - 1)
             posterior = chain[start:]

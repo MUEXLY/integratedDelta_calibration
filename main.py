@@ -9,6 +9,7 @@ from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 
 from plottingFuncts import *
 from functs import *
+from functs import _prior_for_kappa
 
 
 def _math_label(label):
@@ -123,7 +124,46 @@ def main():
             parameter_name,
         )
         theta_labels.append(configured_label)
-    app_labels = [col.replace('x_', '') for col in model_domain.columns]
+    configured_app_labels = label_settings.get("application_domain_labels", {})
+    app_labels = []
+    for index, column in enumerate(model_domain.columns):
+        domain_name = column.replace("x_", "")
+        app_labels.append(
+            next(
+                (
+                    configured_app_labels[key]
+                    for key in (
+                        column,
+                        domain_name,
+                        f"domain{index + 1}",
+                        f"domain_{index + 1}",
+                    )
+                    if key in configured_app_labels
+                ),
+                domain_name,
+            )
+        )
+    configured_observation_labels = label_settings.get("observation_labels", {})
+    observation_labels = []
+    for index, column in enumerate(
+        column for column in obs_data.columns if column.startswith("xi_")
+    ):
+        observation_name = column.replace("xi_", "")
+        observation_labels.append(
+            next(
+                (
+                    configured_observation_labels[key]
+                    for key in (
+                        column,
+                        observation_name,
+                        f"obs{index + 1}",
+                        f"obs_{index + 1}",
+                    )
+                    if key in configured_observation_labels
+                ),
+                observation_name,
+            )
+        )
     configured_kappa_labels = label_settings.get("kappa_labels", {})
     kappa_labels = [
         next(
@@ -136,7 +176,7 @@ def main():
                 )
                 if key in configured_kappa_labels
             ),
-            f"\\kappa_{{{index + 1}}}",
+            "\\delta_{\\theta}",
         )
         for index in range(len(calib_params.columns))
     ]
@@ -187,6 +227,9 @@ def main():
             figures_directory,
             observation_set_label=observation_set_label,
             simulation_set_label=simulation_set_label,
+            theta_labels=theta_labels,
+            application_domain_label=app_labels[0],
+            observation_label=observation_labels[0],
         )
 
     # Simulator inputs
@@ -222,6 +265,10 @@ def main():
 
     dtheta = theta_sim.shape[1]
     No = len(x_obs)
+    kappa_hyperpriors = build_kappa_hyperpriors(
+        validation_options.get("kappa_hyperpriors"),
+        dtheta,
+    )
 
     # ============================================================
     # 2. Train probabilistic emulator GP η(x,θ)
@@ -299,9 +346,6 @@ def main():
     Nmcmc=calibration_settings["N_mcmc"]
     mh_scale_delta=calibration_settings["mh_scale_delta_prior"]
 
-    prior_ell = {"mu": -1.0, "sigma": 1.0}
-    prior_var = {"mu": -2.0, "sigma": 1.0}
-
     mh_scales = {
         "log_ell_delta": 0.1,
         "log_var_delta": 0.1
@@ -377,6 +421,7 @@ def main():
 
         # ---- update δ hyperparameters ----
         for k in range(dtheta):
+            prior_ell, prior_var = _prior_for_kappa(kappa_hyperpriors, k)
             ell_delta[k], var_delta[k], _ = mh_update_delta_hyperparams(
                 delta[k],
                 ell_delta[k],
@@ -586,6 +631,8 @@ def main():
             external_correction_phys,
             observation_set_label=observation_set_label,
             simulation_set_label=simulation_set_label,
+            application_domain_label=app_labels[0],
+            observation_label=observation_labels[0],
             figures_directory=figures_directory,
             filename=external_validation.get(
                 "figure_filename", "external_validation.png"
@@ -639,6 +686,7 @@ def main():
             mh_scale_delta=calibration_settings["mh_scale_delta_prior"],
             allow_singular_covariance=allow_singular_covariance,
             random_state=validation_options.get('random_seed', 0),
+            kappa_hyperpriors=kappa_hyperpriors,
         )
         full_scale = np.ptp(y_obs_phys)
         full_scale = full_scale if full_scale > 0 else 1.0
@@ -679,6 +727,51 @@ def main():
         with open(holdout_json_path, 'w') as f:
             json.dump(holdout_metrics, f, indent=4)
         print(f"Saved holdout sensitivity metrics to {holdout_json_path}")
+
+    if figure_options.get("kappa_hyperprior_sensitivity", False):
+        hyperprior_metrics = kappa_hyperprior_sensitivity(
+            x_obs,
+            y_obs,
+            theta_fixed,
+            gp_eta,
+            dtheta,
+            kappa_hyperpriors,
+            factors=validation_options.get(
+                "kappa_hyperprior_factors", (0.5, 1.0, 2.0)
+            ),
+            n_repeats=validation_options.get(
+                "kappa_hyperprior_repeats", 5
+            ),
+            n_mcmc=validation_options.get(
+                "kappa_hyperprior_n_mcmc",
+                max(1000, calibration_settings["N_mcmc"] // 5),
+            ),
+            burn_in=validation_options.get(
+                "kappa_hyperprior_burn_in",
+                max(250, burnin // 2),
+            ),
+            mh_scale_delta=calibration_settings["mh_scale_delta_prior"],
+            allow_singular_covariance=allow_singular_covariance,
+            random_state=validation_options.get("random_seed", 0),
+        )
+        plot_kappa_hyperprior_sensitivity(
+            hyperprior_metrics,
+            kappa_labels,
+            theta_labels,
+            figures_directory,
+            filename=validation_options.get(
+                "kappa_hyperprior_sensitivity_filename",
+                "kappa_hyperprior_sensitivity.png",
+            ),
+        )
+        os.makedirs(results_directory, exist_ok=True)
+        hyperprior_json_path = os.path.join(
+            results_directory,
+            "kappa_hyperprior_sensitivity_metrics.json",
+        )
+        with open(hyperprior_json_path, "w") as f:
+            json.dump(hyperprior_metrics, f, indent=4)
+        print(f"Saved kappa hyperprior sensitivity metrics to {hyperprior_json_path}")
 
     # ============================================================
     # Cross-validation metrics
@@ -1009,7 +1102,7 @@ def main():
             ax.legend()
             ax.grid(True)
 
-        axes[-1].set_xlabel("x")
+        axes[-1].set_xlabel("x (normalized domain)")
 
         plt.tight_layout()
         plt_path = os.path.join(figures_directory, f"delta_posterior_normalized.png")
@@ -1042,7 +1135,7 @@ def main():
             mean_k = delta_mean_phys[k, x_sorted_idx]
             std_k = delta_std_phys[k, x_sorted_idx]
 
-            # Plot kappa itself as a deviation from the fixed theta^0 = 0
+            # Plot delta_theta itself as a deviation from the fixed theta^0 = 0
             # reference, rather than the absolute calibrated theta field.
             ax.plot(
                 x_sorted_phys,
@@ -1073,7 +1166,7 @@ def main():
                 linestyle="--",
                 linewidth=1,
                 label=(
-                    r"$\kappa=0$ baseline "
+                    r"$\delta_\theta=0$ baseline "
                     rf"($\theta^0_{{\rm phys}}={theta_fixed_phys[k]:.4g}$)"
                 ),
             )
@@ -1144,7 +1237,7 @@ def main():
             ax.legend()
             ax.grid(True)
 
-        axes[-1].set_xlabel("x")
+        axes[-1].set_xlabel(_math_label(app_labels[0]))
         plt.tight_layout()
         plt_path = os.path.join(figures_directory, f"delta_posterior_physical.png")
         plt.savefig(plt_path, dpi=150)
