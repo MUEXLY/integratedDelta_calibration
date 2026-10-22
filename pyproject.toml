@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "integrated-delta-calibration"
+version = "0.1.0"
+description = "Bayesian model calibration with an integrated discrepancy Gaussian process."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  {name = "Liam Myhill"},
+  {name = "Enrique Martinez Saez"},
+  {name = "Sez Russcher"},
+]
+dependencies = [
+  "matplotlib>=3.7",
+  "numpy>=1.24",
+  "pandas>=2.0",
+  "scikit-learn>=1.2",
+  "scipy>=1.10",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Homepage = "https://github.com/MUEXLY/integratedDelta_calibration"
+Repository = "https://github.com/MUEXLY/integratedDelta_calibration"
+Paper = "https://arxiv.org/abs/2603.11960"
+
+[project.scripts]
+integrated-delta-calibration = "integrated_delta_calibration.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["integrated_delta_calibration*"]

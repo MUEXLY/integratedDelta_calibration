@@ -46,6 +46,42 @@ Core dependencies include:
 - pandas  
 - scikit-learn  
 
+## Installing as a Python library
+
+The reusable calibration methods are available from the
+`integrated_delta_calibration` package. Install the latest release from PyPI
+with:
+
+    pip install integrated-delta-calibration
+
+Or install the repository in editable mode while developing:
+
+    pip install -e .
+
+The numerical API can then be imported without relying on the repository
+working directory:
+
+```python
+from integrated_delta_calibration import rbf_kernel, run_delta_sampler
+```
+
+The command-line workflow is also installed as:
+
+    integrated-delta-calibration --config path/to/config.json
+
+The configuration file remains responsible for locating model and observation
+data, and paths in that file are resolved relative to the configuration file's
+directory when invoked through the installed command.
+
+## Demo notebook
+
+`demo_synthetic_calibration.ipynb` walks through loading the included
+`syntheticProb` dataset, fitting a Gaussian-process emulator, running a short
+integrated-discrepancy calibration, and plotting the result. Run it from the
+repository root after installing the package and its dependencies:
+
+    jupyter lab demo_synthetic_calibration.ipynb
+
 ---
 
 ## Running the Calibration

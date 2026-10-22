@@ -9,7 +9,7 @@ authors:
   - family-names: Russcher
     given-names: Sez
 year: 2026
-repository-code: https://github.com/<your-username>/<repo-name>
+repository-code: https://github.com/MUEXLY/integratedDelta_calibration
 url: https://arxiv.org/abs/2603.11960
 
 preferred-citation:
@@ -26,5 +26,4 @@ preferred-citation:
   archive: arXiv
   identifier: "arXiv:2603.11960"
   url: https://arxiv.org/abs/2603.11960
-
 
