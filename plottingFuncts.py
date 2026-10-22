@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import os
 from scipy.stats import gaussian_kde
 from sklearn.decomposition import PCA
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 
 def _math_label(label):
@@ -384,7 +385,7 @@ def plot_holdout_predictions(
             color="tab:red",
             marker="x",
             s=55,
-            label="Held out",
+            label="Holdout",
         )
         prediction_ax.set_title(
             f"Full posterior\nfraction={case['fraction']:.2g}, trial={row + 1}"
@@ -407,7 +408,7 @@ def plot_holdout_predictions(
                 color="tab:red",
                 marker="x",
                 s=55,
-                label="Held out",
+                label="Holdout",
             )
             correction_ax.axhline(0, color="black", linewidth=0.8)
             correction_ax.set_title(
@@ -458,7 +459,7 @@ def plot_kappa_hyperprior_sensitivity(
                 labels.append(
                     f"{_math_label(correction_label)}"
                     f"\n({_math_label(theta_label)})"
-                    f"\n$\{hyperparameter}$"
+                    f"\n${hyperparameter}$"
                 )
 
     fig, ax = plt.subplots(figsize=(max(8, 1.25 * len(groups)), 5.5))
@@ -497,8 +498,13 @@ def plot_holdout_nrmse_sensitivity(
     holdout_metrics,
     figures_directory,
     filename="holdout_nrmse_sensitivity.png",
+    holdout_cases=None,
+    full_x=None,
+    full_y_true=None,
+    full_y_pred=None,
+    full_y_pred_std=None,
 ):
-    """Plot aggregate NRMSE sensitivity across the full holdout experiment."""
+    """Plot aggregate NRMSE sensitivity with a largest-fraction posterior inset."""
     holdout_results = holdout_metrics.get("holdout_results", {})
     if not holdout_results:
         raise ValueError("holdout_metrics contains no holdout results")
@@ -546,7 +552,68 @@ def plot_holdout_nrmse_sensitivity(
     ax.set_title("Holdout sensitivity across the application domain")
     ax.grid(True, alpha=0.3)
     ax.legend()
-    fig.tight_layout()
+
+    if holdout_cases and all(
+        value is not None
+        for value in (full_x, full_y_true, full_y_pred, full_y_pred_std)
+    ):
+        selected_case = max(
+            holdout_cases,
+            key=lambda case: float(case["fraction"]),
+        )
+        holdout_indices = np.asarray(selected_case["indices"], dtype=int)
+        full_x = np.asarray(full_x, dtype=float).ravel()
+        full_y_true = np.asarray(full_y_true, dtype=float).ravel()
+        full_y_pred = np.asarray(full_y_pred, dtype=float).ravel()
+        full_y_pred_std = np.asarray(full_y_pred_std, dtype=float).ravel()
+        inset_ax = inset_axes(
+            ax,
+            width="43%",
+            height="43%",
+            loc="center right",
+            borderpad=1.2,
+        )
+        order = np.argsort(full_x)
+        inset_ax.fill_between(
+            full_x[order],
+            full_y_pred[order] - 2 * full_y_pred_std[order],
+            full_y_pred[order] + 2 * full_y_pred_std[order],
+            color="tab:blue",
+            alpha=0.2,
+            label="95% posterior interval",
+        )
+        inset_ax.scatter(
+            full_x,
+            full_y_true,
+            color="0.35",
+            s=10,
+            label="Observations",
+        )
+        inset_ax.plot(
+            full_x[order],
+            full_y_pred[order],
+            color="tab:blue",
+            linewidth=1.2,
+            label="Posterior mean",
+        )
+        inset_ax.scatter(
+            full_x[holdout_indices],
+            full_y_true[holdout_indices],
+            color="tab:red",
+            marker="x",
+            s=22,
+            label="Holdout",
+        )
+        inset_ax.set_title(
+            f"Full posterior\n"
+            f"holdout={float(selected_case['fraction']):.1%}",
+            fontsize=8,
+        )
+        inset_ax.tick_params(labelsize=7)
+        inset_ax.grid(True, alpha=0.2)
+        inset_ax.legend(fontsize=6, loc="best")
+
+    fig.subplots_adjust(left=0.10, right=0.98, bottom=0.12, top=0.90)
 
     os.makedirs(figures_directory, exist_ok=True)
     path = os.path.join(figures_directory, filename)
@@ -577,7 +644,7 @@ def plot_external_validation(
     observation_label="Response",
     filename="external_validation.png",
 ):
-    """Plot external validation points against the calibrated prediction."""
+    """Plot validation points and prior/posterior parameter corrections."""
     x_obs = np.asarray(x_obs, dtype=float).ravel()
     y_post_mean = np.asarray(y_post_mean, dtype=float).ravel()
     y_post_std = np.asarray(y_post_std, dtype=float).ravel()
@@ -639,7 +706,7 @@ def plot_external_validation(
         color="tab:red",
         marker="x",
         s=55,
-        label=f"{simulation_set_label} runs",
+        label=f"Corrected {simulation_set_label} runs",
     )
     # prediction_ax.scatter(
     #     x_external,
@@ -673,16 +740,16 @@ def plot_external_validation(
             np.zeros(len(external_parameters)),
             external_parameters[:, index],
             alpha=0.65,
-            label="External parameter",
+            label=r"Prior $\theta$",
         )
         parameter_ax.scatter(
             np.ones(len(external_parameters)),
             (external_parameters + parameter_corrections)[:, index],
             alpha=0.65,
-            label="Parameter + correction",
+            label=r"Posterior $\theta^*=\theta^0+\delta_\theta$",
         )
         parameter_ax.set_xticks([0, 1])
-        parameter_ax.set_xticklabels(["External", "Corrected"], rotation=30)
+        parameter_ax.set_xticklabels(["Prior", "Posterior"], rotation=30)
         parameter_ax.set_ylabel("Parameter value")
         parameter_ax.set_title(_math_label(parameter_name))
         parameter_ax.grid(True, axis="y", alpha=0.3)

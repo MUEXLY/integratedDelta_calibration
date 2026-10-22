@@ -719,6 +719,11 @@ def main():
                     'holdout_nrmse_filename',
                     'holdout_nrmse_sensitivity.png',
                 ),
+                holdout_cases=holdout_metrics['cases'],
+                full_x=x_obs_phys,
+                full_y_true=y_obs_phys,
+                full_y_pred=y_post_mean_phys,
+                full_y_pred_std=y_post_std_phys,
             )
         os.makedirs(results_directory, exist_ok=True)
         holdout_json_path = os.path.join(
