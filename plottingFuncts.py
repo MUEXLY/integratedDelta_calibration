@@ -643,8 +643,14 @@ def plot_external_validation(
     application_domain_label="Application domain",
     observation_label="Response",
     filename="external_validation.png",
+    prior_parameters=None,
 ):
-    """Plot validation points and prior/posterior parameter corrections."""
+    """Plot validation points and prior/posterior parameter corrections.
+
+    ``prior_parameters`` are the calibration routine's prior input points,
+    while ``external_parameters`` are the parameter values from the external
+    validation file used to form the corrected posterior points.
+    """
     x_obs = np.asarray(x_obs, dtype=float).ravel()
     y_post_mean = np.asarray(y_post_mean, dtype=float).ravel()
     y_post_std = np.asarray(y_post_std, dtype=float).ravel()
@@ -660,10 +666,37 @@ def plot_external_validation(
     y_observation = np.asarray(y_observation, dtype=float).ravel()
 
     n_parameters = len(parameter_names)
+    if prior_parameters is None:
+        raise ValueError("prior_parameters must be provided")
+    prior_parameters = np.asarray(prior_parameters, dtype=float)
+    if prior_parameters.ndim != 2 or prior_parameters.shape[1] != n_parameters:
+        raise ValueError(
+            "prior_parameters must be a two-dimensional array with one column "
+            "per parameter"
+        )
+    if external_parameters.ndim != 2 or external_parameters.shape[1] != n_parameters:
+        raise ValueError(
+            "external_parameters must be a two-dimensional array with one column "
+            "per parameter"
+        )
+    if parameter_corrections.shape != external_parameters.shape:
+        raise ValueError(
+            "parameter_corrections must have the same shape as external_parameters"
+        )
+    if len(x_external) != len(external_parameters):
+        raise ValueError("x_external must have one value per external parameter row")
+
+    unique_external_x = np.unique(x_external)
+    marker_cycle = ("x", "D", "^", "s", "P", "*")
+    external_markers = {
+        x_value: marker_cycle[index % len(marker_cycle)]
+        for index, x_value in enumerate(unique_external_x)
+    }
+
     fig, axes = plt.subplots(
         1,
         n_parameters + 1,
-        figsize=(7 + 3.2 * n_parameters, 6),
+        figsize=(7 + 3.0 * n_parameters, 5.5),
         gridspec_kw={"width_ratios": [2.2] + [1] * n_parameters},
         squeeze=False,
     )
@@ -700,14 +733,21 @@ def plot_external_validation(
         alpha=0.2,
         label="95% posterior interval",
     )
-    prediction_ax.scatter(
-        x_external,
-        y_external,
-        color="tab:red",
-        marker="x",
-        s=55,
-        label=f"Corrected {simulation_set_label} runs",
-    )
+    corrected_handles = []
+    for x_value in unique_external_x:
+        rows = x_external == x_value
+        corrected_scatter = prediction_ax.scatter(
+            x_external[rows],
+            y_external[rows],
+            color="tab:red",
+            marker=external_markers[x_value],
+            s=90 if external_markers[x_value] == "x" else 58,
+            alpha=0.95,
+            edgecolors="black" if external_markers[x_value] != "x" else None,
+            linewidths=1.2 if external_markers[x_value] == "x" else 0.6,
+            label="_nolegend_",
+        )
+        corrected_handles.append(corrected_scatter)
     # prediction_ax.scatter(
     #     x_external,
     #     y_external_pred,
@@ -733,29 +773,55 @@ def plot_external_validation(
     prediction_ax.grid(True, alpha=0.3)
     prediction_ax.legend()
 
+    prior_handle = None
     for index, (parameter_ax, parameter_name) in enumerate(
         zip(parameter_axes, parameter_names)
     ):
-        parameter_ax.scatter(
-            np.zeros(len(external_parameters)),
-            external_parameters[:, index],
+        prior_scatter = parameter_ax.scatter(
+            np.zeros(len(prior_parameters)),
+            prior_parameters[:, index],
+            color="0.45",
+            marker="o",
+            s=20,
             alpha=0.65,
-            label=r"Prior $\theta$",
         )
-        parameter_ax.scatter(
-            np.ones(len(external_parameters)),
-            (external_parameters + parameter_corrections)[:, index],
-            alpha=0.65,
-            label=r"Posterior $\theta^*=\theta^0+\delta_\theta$",
-        )
+        if prior_handle is None:
+            prior_handle = prior_scatter
+
+        for x_value in unique_external_x:
+            rows = x_external == x_value
+            posterior_scatter = parameter_ax.scatter(
+                np.ones(np.count_nonzero(rows)),
+                (external_parameters + parameter_corrections)[rows, index],
+                color="tab:orange",
+                marker=external_markers[x_value],
+                s=42,
+                alpha=0.85,
+                edgecolors="black" if external_markers[x_value] != "x" else None,
+                linewidths=0.6,
+            )
         parameter_ax.set_xticks([0, 1])
         parameter_ax.set_xticklabels(["Prior", "Posterior"], rotation=30)
         parameter_ax.set_ylabel("Parameter value")
         parameter_ax.set_title(_math_label(parameter_name))
         parameter_ax.grid(True, axis="y", alpha=0.3)
-        parameter_ax.legend(fontsize="small")
 
-    fig.tight_layout()
+    legend_handles = [prior_handle] + corrected_handles
+    legend_labels = [r"Prior $\theta$"] + [
+        f"Corrected {simulation_set_label} at {application_domain_label}={x_value:g}"
+        for x_value in unique_external_x
+    ]
+    fig.legend(
+        legend_handles,
+        legend_labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.995),
+        ncol=min(1 + len(corrected_handles), 3),
+        fontsize="small",
+        frameon=False,
+        markerscale=0.9,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
     os.makedirs(figures_directory, exist_ok=True)
     path = os.path.join(figures_directory, filename)
     fig.savefig(path, dpi=150)
