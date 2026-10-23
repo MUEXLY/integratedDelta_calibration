@@ -207,6 +207,10 @@ discrepancy correction evaluated at each external application-domain point.
 The external-validation figure also includes the original simulation and
 observation datasets; external validation points use the configured simulation
 set label. Each calibration parameter is shown in its own panel and y-axis.
+The parameter panels use the calibration input `theta_*` values as prior
+points. Corrected external-validation points use consistent marker shapes for
+each unique external application-domain location, with a compact shared legend
+below the panels.
 
 ### `results_path` & `results_options`
 

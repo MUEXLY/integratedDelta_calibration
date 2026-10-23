@@ -637,6 +637,7 @@ def main():
             filename=external_validation.get(
                 "figure_filename", "external_validation.png"
             ),
+            prior_parameters=model_data[theta_cols].to_numpy(),
         )
         external_results_path = os.path.join(
             results_directory, "external_validation_predictions.csv"
