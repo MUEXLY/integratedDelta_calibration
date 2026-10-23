@@ -733,14 +733,21 @@ def plot_external_validation(
         alpha=0.2,
         label="95% posterior interval",
     )
-    prediction_ax.scatter(
-        x_external,
-        y_external,
-        color="tab:red",
-        marker="x",
-        s=55,
-        label=f"Corrected {simulation_set_label} runs",
-    )
+    corrected_handles = []
+    for x_value in unique_external_x:
+        rows = x_external == x_value
+        corrected_scatter = prediction_ax.scatter(
+            x_external[rows],
+            y_external[rows],
+            color="tab:red",
+            marker=external_markers[x_value],
+            s=90 if external_markers[x_value] == "x" else 58,
+            alpha=0.95,
+            edgecolors="black" if external_markers[x_value] != "x" else None,
+            linewidths=1.2 if external_markers[x_value] == "x" else 0.6,
+            label="_nolegend_",
+        )
+        corrected_handles.append(corrected_scatter)
     # prediction_ax.scatter(
     #     x_external,
     #     y_external_pred,
@@ -767,7 +774,6 @@ def plot_external_validation(
     prediction_ax.legend()
 
     prior_handle = None
-    posterior_handles = []
     for index, (parameter_ax, parameter_name) in enumerate(
         zip(parameter_axes, parameter_names)
     ):
@@ -794,32 +800,28 @@ def plot_external_validation(
                 edgecolors="black" if external_markers[x_value] != "x" else None,
                 linewidths=0.6,
             )
-            if index == 0:
-                posterior_handles.append(
-                    (posterior_scatter, f"Posterior at x={x_value:g}")
-                )
-
         parameter_ax.set_xticks([0, 1])
         parameter_ax.set_xticklabels(["Prior", "Posterior"], rotation=30)
         parameter_ax.set_ylabel("Parameter value")
         parameter_ax.set_title(_math_label(parameter_name))
         parameter_ax.grid(True, axis="y", alpha=0.3)
 
-    legend_handles = [prior_handle] + [handle for handle, _ in posterior_handles]
+    legend_handles = [prior_handle] + corrected_handles
     legend_labels = [r"Prior $\theta$"] + [
-        label for _, label in posterior_handles
+        f"Corrected {simulation_set_label} at x={x_value:g}"
+        for x_value in unique_external_x
     ]
     fig.legend(
         legend_handles,
         legend_labels,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 0.005),
-        ncol=min(1 + len(posterior_handles), 3),
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.995),
+        ncol=min(1 + len(corrected_handles), 3),
         fontsize="small",
         frameon=False,
         markerscale=0.9,
     )
-    fig.tight_layout(rect=(0, 0.12, 1, 1))
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
     os.makedirs(figures_directory, exist_ok=True)
     path = os.path.join(figures_directory, filename)
     fig.savefig(path, dpi=150)

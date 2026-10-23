@@ -209,8 +209,8 @@ observation datasets; external validation points use the configured simulation
 set label. Each calibration parameter is shown in its own panel and y-axis.
 The parameter panels use the calibration input `theta_*` values as prior
 points. Corrected external-validation points use consistent marker shapes for
-each unique external application-domain location, with a compact shared legend
-below the panels.
+each unique external application-domain location in both the prediction and
+parameter panels, with a compact shared legend above the panels.
 
 ### `results_path` & `results_options`
 
