@@ -808,7 +808,7 @@ def plot_external_validation(
 
     legend_handles = [prior_handle] + corrected_handles
     legend_labels = [r"Prior $\theta$"] + [
-        f"Corrected {simulation_set_label} at x={x_value:g}"
+        f"Corrected {simulation_set_label} at {application_domain_label}={x_value:g}"
         for x_value in unique_external_x
     ]
     fig.legend(
